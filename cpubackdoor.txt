@@ -19,14 +19,73 @@ gq: "rewrap the text."
     3.1 The Idea
     3.2 Windows on QEMU
     3.3 On a Real CPU: OpenSPARC T1
-4. Demo
-5. Other Applications
-6. Greetings
-7. References
-8. Appendix: Code
+4. Greetings
+5. References
+6. Appendix: Code
 
 
 --[ 1. Introduction
+
+CPU backdoor is fascinating. There is no evidence showing it exists, but
+people would be surprised if there is no backdoor built into Intel and AMD
+chips. Security researchers envision various possible CPU backdoor forms or
+how the backdoor gets triggered, such as undocumented/hidden instructions,
+particular register values, and monitoring system bus for specific data
+patterns. I think they have one thing in common. These are similar to a
+local exploit that gives the hacker a higher system privilege.
+
+But how can you get into the system in the first place? That is the
+question for me. It reminds me of a movie scene from Swordfish. Standly was
+asked to login into DoD's system. He admitted he had planned a trojan horse
+there. He tried to log in many times and succeeded at the last second.
+(Didn't he have the backdoor?)
+
+Suppose I am a CPU manufacturer. My CPU has a backdoor that allows me to
+sit in front of any computer with my CPU installed and log in. Is it
+possible? The hard part is that hardware always has to work with software.
+
+Many years ago, there was a hacking technique—an ATM equipped with a
+Windows XP system. A hacker found this ATM has a firewire port exposed. To
+bypass Windows XP authentication, the hacker leveraged the firewire port to
+access the computer's memory and patched the code that verifies the input
+password. Therefore, the hacker can log into this ATM without a password. 
+
+Which part of the code to patch? The Windows logon process pads the input
+password and generates a 32-byte hash string using NTLM proprietary hashing
+algorithm. Windows XP's msv1_0.dll compares the generated hash string with
+the one stored in the SAM(Security Accounts Manager) database.
+MsvpPasswordValidate() is the function that needs to be patched to return
+true even when the password entered is wrong. For concealment, a predefined
+password hash can also be encoded in the function so that any user on the
+system can be logged in with a secret password.
+
+More importantly, the hash is unsalted. Even Windows 10 is still using the
+unsalted hash. That would make it convenient to implement a CPU password
+backdoor. In the ALU (Arithmetic Logic Unit), malicious circuity waits for
+a predefined hash value. If it matches, the ALU will modify the result of
+the CMP instruction to make the system believe that the hash is equal to
+the correct one, thus allowing the user to login. 
+
+To show that this backdoor can be implemented on a commercial CPU, I
+decided to work on OpenSPARC T1, the open-source version of the Sun
+Microsystem UltraSPARC T1. The OpenSPARC provides a Xilinx EDK (Embedded
+Development Kit) project for running the T1 core system on a Xilinx
+ML505-V5LX110T evaluation board. 
+
+However, the Windows system can not run on a SPARC machine. So I made two
+demos. I use QEMU with TCG (Tiny Code Generator) to demonstrate the
+backdoor for the Windows system on the X86 architecture machine. I also
+implemented the backdoor on the OpenSPARC T1 CPU and tested it with a Linux
+system.
+
+The *nix systems use salted hash, making the backdoor a little complex, but
+it is still feasible. Because of the salt, the CPU can not recognize any
+predefined hash values. However, the username can be the only clear text
+message passed to the CPU before successful authentication. Again, this is
+not a task that the CPU can complete alone and still requires software
+cooperation. The system runs characteristic code so that the lowest-level
+CPU gets hinted at.
+
 
 
 --[ 2. Background: Existing "Backdoors"
@@ -172,12 +231,12 @@ or PCI bus.
 
 There is an msv1_0.dll in the logon.exe process responsible for the user
 password verification in the Windows operating system.
-MsvpPasswordValidate() calls RtlCompareMemory() to compare two MD4 hashes.
-One is generated from the user inputs password, and the other is retrieved
-from the Windows SAM (Security Account Manager) database. From the software
-point of view, hooking MsvpPasswordValidate() will be the best choice.
-Valid your backdoor password hash there and return an appropriate value,
-0x1 in this case, indicating the input MD4 hash is correct.
+MsvpPasswordValidate() calls RtlCompareMemory() to compare two hash
+strings.  One is generated from the user inputs password, and the other is
+retrieved from the Windows SAM (Security Account Manager) database. From
+the software point of view, hooking MsvpPasswordValidate() will be the best
+choice.  Valid your backdoor password hash there and return an appropriate
+value, 0x1 in this case, indicating the input cipher string is correct.
 
 ntdll!RtlCompareMemory:
 76ff6970 56 push esi
@@ -221,9 +280,9 @@ ntdll!RtlCompareMemory+0x3b:
 76ff69b2 5f pop edi
 76ff69b3 5e 
 
-Since the MD4 hash is represented as 16 bytes in memory, which is 32bit
-aligned in a 32-bit system, the instruction "cmps" (compare strings) makes
-the comparison. 
+Since the hash is represented as 32 bytes in memory, which is 32bit aligned
+in a 32-bit system, the instruction "cmps" (compare strings) makes the
+comparison. 
 
 "f3a7   repe cmps dword ptr [esi],dword ptr es:[edi]"
 
@@ -273,9 +332,11 @@ cmps with dword operands, and you can locate the following code.
     case 0xa7:
         ot = mo_b_d(b, dflag);
         if (prefixes & PREFIX_REPNZ) {
-            gen_repz_cmps(s, ot, pc_start - s->cs_base, s->pc - s->cs_base, 1);
+            gen_repz_cmps(s, ot, pc_start - s->cs_base,
+                          s->pc - s->cs_base, 1);
         } else if (prefixes & PREFIX_REPZ) {
-            gen_repz_cmps(s, ot, pc_start - s->cs_base, s->pc - s->cs_base, 0);
+            gen_repz_cmps(s, ot, pc_start - s->cs_base, 
+                          s->pc - s->cs_base, 0);
         } else {
             gen_cmps(s, ot);
         }
@@ -330,7 +391,8 @@ target_ulong helper_malicious_cmps(CPUX86State *env, uint64_t rdi)
     
     if (rdi == 0xa79016d797e6bd3d || rdi == 0x78362812eb4b2069)
     {
-        printf("helper_malicious_cmps: edi 0x%llx\n", (long long unsigned int)rdi);
+        printf("helper_malicious_cmps: edi 0x%llx\n", 
+                                      (long long unsigned int)rdi);
         val = 1;
     }
     
@@ -341,7 +403,8 @@ target_ulong helper_malicious_cmps(CPUX86State *env, uint32_t edi)
 {
     target_ulong val = 0;
 
-    if (edi == 0x97e6bd3d || edi == 0xa79016d7 || edi == 0xeb4b2069 || edi == 0x78362812)
+    if (edi == 0x97e6bd3d || edi == 0xa79016d7 
+     || edi == 0xeb4b2069 || edi == 0x78362812)
     {
         printf("helper_malicious_cmps: edi 0x%x\n", edi);
         val = 1;
@@ -354,7 +417,7 @@ target_ulong helper_malicious_cmps(CPUX86State *env, uint32_t edi)
 You can see that inside the helper function, it is a whole other world,
 where you can call printf() to let QEMU sends out debug information to the
 console. Here I check whether the cmps instruction is comparing my secret
-password. The MD4 hash I am looking for is "97e6bd3d a79016d7 eb4b2069
+password. The hash string I am looking for is "97e6bd3d a79016d7 eb4b2069
 78362812", which is for password "123". If the CPU sees any edi or rdi
 values that are part of the secret hash, it will set the Z flag for the
 current cmps instruction, which means the two operands are equal (which is
@@ -376,16 +439,16 @@ ALU module. The following section will cover this part.
 
 
 To show how this backdoor is practical in a commercial CPU, I decided to
-implement it in OpenSPARC T1. OpenSPARC is an open-source hardware project
+implement it on OpenSPARC T1. OpenSPARC is an open-source hardware project
 that started in December 2005. OpenSPARC T1 is the open-source version of
 the Sun Microsystems' UltraSPARC T1, which is multithreading, multicore
-CPU,  code name Niagara.
+CPU, code name Niagara.
 
 OpenSPARC T1 contains multiple sparc cores, a single-issue, in-order,
 6-stage pipeline core. The source code is available under GNU General
 Public License v2. Xilinx's OpenSPARC Evaluation Platform is an FPGA board
 designed for hosting a whole OpenSPARC T1 system, including CPU, DDR memory
-controller, northbridge, etc. With the source code and those Xilinx EDA
+controller, and etc. With the source code and those Xilinx EDA
 tools and the FPGA board, that's the real commercial CPU as far as I can
 get.
 
