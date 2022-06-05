@@ -10,11 +10,10 @@ gq: "rewrap the text."
 --[ Table of contents
 
 1. Introduction
-2. Background: Existing "Backdoors"
-    2.1 Hidden Instructions 
-       2.1.1 VIA C3 Nehemiah ALTINST instruction 
-       2.1.2 AMD K7 MSR Secret Code 0x9C5A203A
-    2.2 Network Chips
+2. Known CPU Backdoors
+    2.1 VIA C3 Nehemiah ALTINST instruction 
+    2.2 AMD K7 MSR Secret Code 0x9C5A203A
+    2.3 Network Chips
 3. A New CPU Backdoor
     3.1 The Idea
     3.2 Windows on QEMU
@@ -88,41 +87,24 @@ CPU gets hinted at.
 
 
 
---[ 2. Background: Existing "Backdoors"
+--[ 2. Known CPU Backdoors
 
---[ 2.1 Hidden Instructions
+When it comes to CPU backdoors, people may first think of hidden
+instructions. For example, the attacker can obtain the highest privilege by
+executing a particular instruction. Indeed, there are undocumented
+instructions[5][6][7][8]. Examing the opcode space from the manual, we know
+that there must be many opcodes that are not documented or not used yet.
+However, all the instructions must comply with the opcode encoding rule,
+and it is not hard to enumerate all possible instructions.  But still,
+there may have some unreviled extension byte for those variety length
+instruction architecture, such as x86.
 
-Hidden instructions will be the first thing to be thought of. There could
-be one instruction that once you execute it, you suddenly become root.
-Indeed, there are undocumented instructions[5][6][7][8]. Examing the opcode
-space from the manual, we know that there must be many opcodes that are not
-documented or not used yet. It is not difficult to find new instructions in
-the more recent manual compared with the old ones.  All instructions need
-to comply with the rules of opcode expansion.  However, defining the extra
-extension byte for the new instruction series is up to the vendor. Besides,
-how to trigger the hidden functionality of an existing instruction is also
-undermined. For example, it may need to load a specific value within a
-particular register to start the backdoor. Such instances exist.
+The opcode partially pasted in the following is the 2-byte opcode map.
+Those instructions' first bye is 0F, which is an escape code. Let's take
+some examples to see how it works. In the first row, the INVD instruction
+should be 0F08. WBINVD is 0F09. In the fourth row, vmovapd should be
+660F28, because the map says it has a prefix 66.
 
---[ 2.1.1 VIA C3 Nehemiah ALTINST instruction 
-
-ALTINST stands for alternation instruction, and it is documented in the
-manual[9] for tests and particular uses. The alternate
-instruction set has additional registers and different instruction forms of
-the x86 instruction architecture. It can run privileged instruction from
-any protection level,  bypass memory descriptor checks, and many x86
-exceptions such as alignment checks. These instructions are undocumented,
-and they are considered RISC-microcode that runs internally in the CPU.
-
-To run these instructions, it needs a unique mechanism. First, set the FCR
-(FEATURE CONTROL REGISTER) ALTINST bit to one using WRMSR, a privileged
-instruction that writes MSR (Model Specific  Register). The use of a
-privileged operation represents that the ALTINST is designed as a debugging
-function. After that, a new two-byte jump instruction 0x0F3F is enabled. In
-the x86 architecture opcode map, 0x0F is an escape byte that leads to the
-following byte parsed as part of the opcode, and 0x0F38 and 0x0F3A are also
-the escape bytes. However, 0x0F3F is an invalid instruction, as shown
-in~\autoref{tab:opcode-map}.
 
 +---------------------------------------------         -------------------+
 |  |pfx|    8   |   9   |     A    |   B    |          |   E    |     F   |
@@ -151,7 +133,53 @@ in~\autoref{tab:opcode-map}.
 |  |   | escape |       |  escape  |        |          |        |         |
 |--+---+--------+-------+----------+--------+-         +--------+---------|
 |       ...                                                               |
+ 
 
+There are also many blanks on the map. For example, 0F0A is blank here, so
+it is either an undocumented or invalid instruction. The ALTINST(0F3F) we
+will talk about later also leaves a blank. In this case, it is a not-fully
+-documented instruction of the VIA CPU. The manual mentioned the existence
+of this alternative instruction but did not fully describe how to use it.
+Instead, the customers need to call the vendor to get detailed information.
+
+The map also shows "3-byte escape" in the seventh row, which means the
+instructions begin with 0F38 or 0F3A, which are the escape code, and the
+following byte also needs to be decoded. We could look up the corresponding
+3-byte opcode map to find more instructions of this kind. Although in the
+Intel manual, the 3-byte opcode is already the most, in theory, the
+subsequent bytes could also be escape code. Also, the blank between 0F38
+and 0F3A may make people wonder what 0F39 is. Is it an undocumented
+instruction or an undocumented escape code? And what about other blanks.
+Therefore I argue that this is where we should start digging, finding all
+the escape code, instead of enumerating the whole encoding space from
+scratch.
+
+In another situation, the instruction is documented, but it may require
+some particular value put in a register to trigger it. Like CPUID, with
+different register values, it can query various CPU information. A
+debugging function of the AMD CPU needs to be turned on like this.
+
+
+
+--[ 2.1 VIA C3 Nehemiah ALTINST instruction 
+
+ALTINST stands for alternation instruction, and it is documented in the
+manual[9] for tests and particular uses. The alternate
+instruction set has additional registers and different instruction forms of
+the x86 instruction architecture. It can run privileged instruction from
+any protection level,  bypass memory descriptor checks, and many x86
+exceptions such as alignment checks. These instructions are undocumented,
+and they are considered RISC-microcode that runs internally in the CPU.
+
+To run these instructions, it needs a unique mechanism. First, set the FCR
+(FEATURE CONTROL REGISTER) ALTINST bit to one using WRMSR, a privileged
+instruction that writes MSR (Model Specific  Register). The use of a
+privileged operation represents that the ALTINST is designed as a debugging
+function. After that, a new two-byte jump instruction 0x0F3F is enabled. In
+the x86 architecture opcode map, 0x0F is an escape byte that leads to the
+following byte parsed as part of the opcode, and 0x0F38 and 0x0F3A are also
+the escape bytes. However, 0x0F3F is an invalid instruction, as shown
+in~\autoref{tab:opcode-map}.
 
 The 0x0F3F jump instruction has no operand. If FCR.ALTINST is zero, the
 execution of 0x0F3F causes an invalid instruction exception. Otherwise, it
@@ -176,7 +204,7 @@ to be ARM. Verifying the alternate instructions is out of the scope of this
 paper.
 
 
---[ 2.1.2 AMD K7 MSR Secret Code 0x9C5A203A
+--[ 2.2 AMD K7 MSR Secret Code 0x9C5A203A
 
 0x9C5A203A is a famous password that enables the hidden debugging function
 of AMD K7 processors. Internet user Czernobyl reveals that undocumented
@@ -200,6 +228,7 @@ Wi-Fi chips connect to the motherboard as peripheral devices. Those chips
 may monitor the network traffic and look for patterns in the data package.
 Once triggered, they can crash the system easily or overwrite the main
 memory to control the system.
+
 
 
 --[ 3. A New CPU Backdoor
