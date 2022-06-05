@@ -157,8 +157,11 @@ scratch.
 In another situation, the instruction is documented, but it may require
 some particular value put in a register to trigger it. Like CPUID, with
 different register values, it can query various CPU information. A
-debugging function of the AMD CPU needs to be turned on like this.
-
+debugging function of the AMD CPU needs to be turned on like this. We hope
+to have a mysterious instruction that can give us something unique but not
+affect the system's regular operations, so it will not be easily
+discovered. Maybe using particular register values for triggering is a
+better approach, especially on 64-bit systems.
 
 
 --[ 2.1 VIA C3 Nehemiah ALTINST instruction 
