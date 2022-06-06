@@ -12,7 +12,7 @@ gq: "rewrap the text."
 1. Introduction
 2. Known CPU Backdoors
     2.1 VIA C3 Nehemiah ALTINST instruction 
-    2.2 AMD K7 MSR Secret Code 0x9C5A203A
+    2.2 AMD Secret Password 0x9C5A203A
     2.3 Network Chips
 3. A New CPU Backdoor
     3.1 The Idea
@@ -155,13 +155,13 @@ the escape code, instead of enumerating the whole encoding space from
 scratch.
 
 In another situation, the instruction is documented, but it may require
-some particular value put in a register to trigger it. Like CPUID, with
-different register values, it can query various CPU information. A
-debugging function of the AMD CPU needs to be turned on like this. We hope
-to have a mysterious instruction that can give us something unique but not
-affect the system's regular operations, so it will not be easily
-discovered. Maybe using particular register values for triggering is a
-better approach, especially on 64-bit systems.
+some particular value put in a register to trigger it[15][16][27]. Like
+CPUID, with different register values, it can query various CPU
+information. A debugging function of the AMD CPU needs to be turned on like
+this. We hope to have a mysterious instruction that can give us something
+unique but not affect the system's regular operations, so it will not be
+easily discovered. Maybe using particular register values for triggering is
+a better approach, especially on 64-bit systems.
 
 
 --[ 2.1 VIA C3 Nehemiah ALTINST instruction 
@@ -207,21 +207,64 @@ to be ARM. Verifying the alternate instructions is out of the scope of this
 paper.
 
 
---[ 2.2 AMD K7 MSR Secret Code 0x9C5A203A
+--[ 2.2 AMD Secret Password 0x9C5A203A
 
-0x9C5A203A is a famous password that enables the hidden debugging function
-of AMD K7 processors. Internet user Czernobyl reveals that undocumented
-MSRs are used for debugging purposes[15]. For instance, MSR
-0xC0010115 is used to access physical memory. Put the physical address into
-the EBX register and the 64-bit value into EDX and EAX registers, and then use
-RDMSR or WRMSR to read/write the physical memory. In particular, this
-function is undocumented but does not require a password. But for many
-other MSRs, it needs to put the password 0x9C5A203A in the EDI to enable
-the debugging capability[16].
+MSR (Model Specific Register) are the various control registers in the x86
+instruction set used for debugging, program execution tracing, computer
+performance monitoring, and toggling certain CPU features. Reading and
+writing to these registers are handled by the RDMSR and WRMSR instructions,
+respectively, with a 32-bit integer as the MSR index. Of course, there are
+undocumented MSRs. But more interestingly, some undocumented MSRs require a
+password to access. (Even only some bit need the password to write.)
+0x9C5A203A is the famous password that enables the hidden debugging
+function of AMD K8 processors. Internet user Czernobyl reveals that
+undocumented MSRs are used for debugging[15]. It needs to put the password
+0x9C5A203A in the EDI to enable the debugging capability[16]. Otherwise, a
+GPF exception occurs.
 
-As learned from this example, we know that the MSR can provide various
-capacities, and it is practical to use a unique value in a register to
-trigger the hidden function.
+An AMD white paper called "Live Migration with AMD-V Extended Migration
+Technology" mentions password-protected MSRs. The following code sample
+shows how a VMM (or OS) can hide reporting of RDTSCP instruction on the
+Second-Generation AMD Opteron processor.
+
+/*
+ * Example 3: Use MSR C001_1005 to clear bit 27 (RDTSCP) reported in
+ * EDX after CPUID Function 8000_0001
+ */
+
+        /*
+         Read current value of the CPUID Override MSR C001_1005.
+         After RDMSR completes, EDX:EAX contains the 64bit MSR value.
+         EDX is loaded with the high 32 bits of the MSR and EAX is loaded
+         with the low 32 bits. The low 32 bits of this MSR are returned in
+         EDX after CPUID Function 8000_0001
+        */
+
+        /*
+         Write the new EDX:EAX value into CPUID override MSR.
+         Second-Generation AMD Opteron Processors require a
+         32 bit password in EDI. Contact AMD to get the password.
+        */
+
+                MOV EDI, <PASSWORD>
+        
+                MOV CX, 0xC0011005h
+                RDMSR
+
+        /*
+         Clear bit 27 (RDTSCP) of EAX register
+        */
+
+                ANDL EAX, 0xF7FFFFFFh
+                WRMSR
+
+
+
+While RDMSR and WRMSR are already privileged instructions, the undocumented
+MSR plus a 32-bit password in specific a register should not conflict with
+regular kernel programs. Moreover, from AMD's white paper, even if it is
+the same MSR c0011005h, the password is only required for writing a
+specific bit. It makes discovering such hidden features more difficult.
 
 
 --[ 2.2 Network Chips
@@ -1180,5 +1223,8 @@ root@t1-fpga-00:~#
 [16] AMD Undocumented Machine-Specific Registers
      http://cbid.softnology.biz/html/undocmsrs.html
 [25] https://wiki.qemu.org/Documentation/TCG/frontend-ops
-
 [26] https://docs.oracle.com/cd/E36784_01/pdf/E36858.pdf
+[27] CPU bugs, CPU backdoors and consequences on security
+[28] Live Migration with AMD-V Extended Migration Technology
+     http://developer.amd.com/wordpress/media/2013/02/
+     livevirtualmachinemigrationonamdprocessors.pdf
