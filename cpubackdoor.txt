@@ -10,14 +10,13 @@ gq: "rewrap the text."
 --[ Table of contents
 
 1. Introduction
-2. Known CPU Backdoors
+2. Known CPU "Backdoors"
     2.1 VIA C3 Nehemiah ALTINST instruction 
     2.2 AMD Secret Password 0x9C5A203A
-    2.3 Network Chips
 3. A New CPU Backdoor
-    3.1 The Idea
-    3.2 Windows on QEMU
-    3.3 On a Real CPU: OpenSPARC T1
+    3.1 Backdoored Instruction to Bypass OS Authentication
+    3.2 For Windows (X86)
+    3.3 For Linux (Sparc64)
 4. Greetings
 5. References
 6. Appendix: Code
@@ -267,15 +266,6 @@ the same MSR c0011005h, the password is only required for writing a
 specific bit. It makes discovering such hidden features more difficult.
 
 
---[ 2.2 Network Chips
-
-Other than those mentioned above, I believe that malicious ethernet and
-Wi-Fi chips connect to the motherboard as peripheral devices. Those chips
-may monitor the network traffic and look for patterns in the data package.
-Once triggered, they can crash the system easily or overwrite the main
-memory to control the system.
-
-
 
 --[ 3. A New CPU Backdoor
 
@@ -286,7 +276,7 @@ front of a terminal, and the system asks you for your user name and
 password, like in the movie scene Swordfish. You already have a software
 backdoor installed or a hardware backdoor designed in the machine.
 
---[ 3.1 The Idea
+--[ 3.1 Backdoored Instruction to Bypass OS Authentication
 
 
 Now what I am trying to do here is to explain how to implement a stealthy
@@ -379,7 +369,7 @@ how often have those libraries changed in decades? We do not even know it
 is because of unnecessary or for a purpose.
 
 
---[ 3.2 Windows on QEMU
+--[ 3.2 For Windows (X86)
 
 Unfortunately, I can not find an open-source X86 CPU, nor can I make one
 myself. To demonstrate how the backdoor works for the Windows system, I use
@@ -509,7 +499,7 @@ ALU module. The following section will cover this part.
 
 
 
---[ 3.3 On a Real CPU: OpenSPARC T1
+--[ 3.3 For Linux (Sparc64)
 
 
 
@@ -1196,7 +1186,7 @@ root@t1-fpga-00:~#
 
 
 
---[ 7. References
+--[ 5. References
 
 [5] A Performance Evaluation of Platform-Independent Methods to Search for
     Hidden Instructions on RISC Processors.  
