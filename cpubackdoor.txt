@@ -26,11 +26,11 @@ gq: "rewrap the text."
 
 CPU backdoor is fascinating. There is no evidence showing it exists, but
 people would be surprised if there is no backdoor built into Intel and AMD
-chips. Security researchers envision various possible CPU backdoor forms or
-how the backdoor gets triggered, such as undocumented/hidden instructions,
-particular register values, and monitoring system bus for specific data
-patterns. I think they have one thing in common. These are similar to a
-local exploit that gives the hacker a higher system privilege.
+chips. Security researchers envision various possible CPU backdoor and how
+the backdoor gets triggered, such as undocumented/hidden instructions, a
+unique register value to open mystical function, monitoring system bus for
+specific data patterns, etc. Most of those ideas function like a local
+exploit whose goal is to obtain a higher system privilege.
 
 But how can you get into the system in the first place? That is the
 question for me. It reminds me of a movie scene from Swordfish. Standly was
@@ -39,51 +39,58 @@ there. He tried to log in many times and succeeded at the last second.
 (Didn't he have the backdoor?)
 
 Suppose I am a CPU manufacturer. My CPU has a backdoor that allows me to
-sit in front of any computer with my CPU installed and log in. Is it
-possible? The hard part is that hardware always has to work with software.
+log in to any computer with my CPU installed. Is it possible? Things like
+IPMI(Intelligent Platform Management Interface), BMC(Baseboard Management
+Controller), and Intel AMT(Active Management Technology) can do this.
+Still, those are large systems and are hard to go completely undetected.
+Preferably, the backdoor is hidden in the CPU, but it's hard for a single
+instruction to work through all the software layers to function except for
+a halt-and-catch-fire instruction. So the hard part is that hardware needs
+cooperation from the software. Fortunately/unfortunately, the operating
+system authentication module, intentionally or unintentionally, has not
+changed for many years. It even gets centralized, like the PAM(Pluggable
+Authentication Modules). This is a good opportunity for the CPU to know the
+software.
 
 Many years ago, there was a hacking technique—an ATM equipped with a
 Windows XP system. A hacker found this ATM has a firewire port exposed. To
 bypass Windows XP authentication, the hacker leveraged the firewire port to
 access the computer's memory and patched the code that verifies the input
-password. Therefore, the hacker can log into this ATM without a password. 
-
-Which part of the code to patch? The Windows logon process pads the input
-password and generates a 32-byte hash string using NTLM proprietary hashing
-algorithm. Windows XP's msv1_0.dll compares the generated hash string with
-the one stored in the SAM(Security Accounts Manager) database.
+password. Therefore, the hacker can log into this ATM without a password.
+What code to patch? The Windows logon process pads the input password and
+generates a 32-byte hash string using NTLM proprietary hashing algorithm.
+Windows XP's msv1_0.dll compares the generated hash string with the one
+stored in the SAM(Security Accounts Manager) database.
 MsvpPasswordValidate() is the function that needs to be patched to return
 true even when the password entered is wrong. For concealment, a predefined
-password hash can also be encoded in the function so that any user on the
-system can be logged in with a secret password.
+password hash can also be encoded in the function so that a secret password
+can log in with any username in the system.
 
-More importantly, the hash is unsalted. Even Windows 10 is still using the
-unsalted hash. That would make it convenient to implement a CPU password
-backdoor. In the ALU (Arithmetic Logic Unit), malicious circuity waits for
-a predefined hash value. If it matches, the ALU will modify the result of
-the CMP instruction to make the system believe that the hash is equal to
-the correct one, thus allowing the user to login. 
+More interestingly, the hash is unsalted. Even Windows 10 is still using
+the unsalted hash. That would make it convenient to implement a CPU
+password backdoor. In the ALU (Arithmetic Logic Unit), malicious circuity
+waits for a predefined hash value. If it comes, the ALU will modify the
+result of the CMP instruction to make the system believe that the hash is
+correct, thus allowing the user to login. 
 
-To show that this backdoor can be implemented on a commercial CPU, I
-decided to work on OpenSPARC T1, the open-source version of the Sun
+To show that this backdoor can be implemented on a real commercial CPU, I
+decided to build it on OpenSPARC T1, the open-source version of the Sun
 Microsystem UltraSPARC T1. The OpenSPARC provides a Xilinx EDK (Embedded
-Development Kit) project for running the T1 core system on a Xilinx
+Development Kit) project for running the T1 system on a Xilinx
 ML505-V5LX110T evaluation board. 
 
 However, the Windows system can not run on a SPARC machine. So I made two
 demos. I use QEMU with TCG (Tiny Code Generator) to demonstrate the
-backdoor for the Windows system on the X86 architecture machine. I also
-implemented the backdoor on the OpenSPARC T1 CPU and tested it with a Linux
-system.
+backdoor for the Windows system on the X86 virtual machine. I also
+implemented the backdoor on the OpenSPARC T1 in Verilog code and tested it
+with a Linux system.
 
-The *nix systems use salted hash, making the backdoor a little complex, but
-it is still feasible. Because of the salt, the CPU can not recognize any
-predefined hash values. However, the username can be the only clear text
-message passed to the CPU before successful authentication. Again, this is
-not a task that the CPU can complete alone and still requires software
-cooperation. The system runs characteristic code so that the lowest-level
-CPU gets hinted at.
-
+For Linux, the *nix systems use salted hash, making the backdoor a little
+complex, but it is still feasible. Because of the salt, the CPU can not
+recognize any predefined hash values. However, the username will be the
+only clear text message passed to the CPU before successful authentication.
+Again, this is not a task that the CPU can complete alone. As mentioned
+above, it requires software to cooperate, being unchanged for decades. 
 
 
 --[ 2. Known CPU Backdoors
