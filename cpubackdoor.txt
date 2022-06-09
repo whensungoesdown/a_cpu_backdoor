@@ -30,7 +30,7 @@ chips. Security researchers envision various possible CPU backdoor and how
 the backdoor gets triggered, such as undocumented/hidden instructions, a
 unique register value to open mystical function, monitoring system bus for
 specific data patterns, etc. Most of those ideas function like a local
-exploit whose goal is to obtain a higher system privilege.
+exploit aiming to obtain a higher system privilege.
 
 But how can you get into the system in the first place? That is the
 question for me. It reminds me of a movie scene from Swordfish. Standly was
@@ -52,32 +52,33 @@ changed for many years. It even gets centralized, like the PAM(Pluggable
 Authentication Modules). This is a good opportunity for the CPU to know the
 software.
 
-Many years ago, there was a hacking technique—an ATM equipped with a
-Windows XP system. A hacker found this ATM has a firewire port exposed. To
-bypass Windows XP authentication, the hacker leveraged the firewire port to
-access the computer's memory and patched the code that verifies the input
-password. Therefore, the hacker can log into this ATM without a password.
-What code to patch? The Windows logon process pads the input password and
-generates a 32-byte hash string using NTLM proprietary hashing algorithm.
-Windows XP's msv1_0.dll compares the generated hash string with the one
-stored in the SAM(Security Accounts Manager) database.
+Many years ago, there was a hacking technique: an ATM equipped with a
+Windows XP system and a hacker found this ATM has a firewire port exposed.
+To bypass Windows XP password authentication, the hacker leveraged the
+firewire port to access the computer's memory and patched the code that
+verifies the input password. Therefore, the hacker can log into this ATM
+with any password.  What code to patch? The Windows logon process pads the
+input password and generates a 16-byte hash using NTLM proprietary hashing
+algorithm.  Windows XP's msv1_0.dll compares the generated hash with the
+one stored in the SAM(Security Accounts Manager) database.
 MsvpPasswordValidate() is the function that needs to be patched to return
-true even when the password entered is wrong. For concealment, a predefined
+true even when the password entered is wrong. Moreover, a predefined
 password hash can also be encoded in the function so that a secret password
-can log in with any username in the system.
+can log in to any user account in the system.
 
 More interestingly, the hash is unsalted. Even Windows 10 is still using
-the unsalted hash. That would make it convenient to implement a CPU
-password backdoor. In the ALU (Arithmetic Logic Unit), malicious circuity
-waits for a predefined hash value. If it comes, the ALU will modify the
-result of the CMP instruction to make the system believe that the hash is
-correct, thus allowing the user to login. 
+the unsalted hash. Implementing a CPU password backdoor would be convenient
+because an unsalted hash is predictable. In the CPU's ALU (Arithmetic Logic
+Unit) module, malicious circuity waits for a predefined hash value. When
+this hash compares with the correct one stored in the system, the ALU
+modifies the result of the CMP instruction to make the system believe that
+the hash is correct, thus allowing the user to login. 
 
 To show that this backdoor can be implemented on a real commercial CPU, I
 decided to build it on OpenSPARC T1, the open-source version of the Sun
 Microsystem UltraSPARC T1. The OpenSPARC provides a Xilinx EDK (Embedded
 Development Kit) project for running the T1 system on a Xilinx
-ML505-V5LX110T evaluation board. 
+ML505-V5LX110T FPGA board. That is how far I can get to test on a real CPU.
 
 However, the Windows system can not run on a SPARC machine. So I made two
 demos. I use QEMU with TCG (Tiny Code Generator) to demonstrate the
@@ -87,10 +88,10 @@ with a Linux system.
 
 For Linux, the *nix systems use salted hash, making the backdoor a little
 complex, but it is still feasible. Because of the salt, the CPU can not
-recognize any predefined hash values. However, the username will be the
-only clear text message passed to the CPU before successful authentication.
+recognize any predefined hash values. However, the username can be the only
+clear text message passed to the CPU before successful authentication.
 Again, this is not a task that the CPU can complete alone. As mentioned
-above, it requires software to cooperate, being unchanged for decades. 
+above, it requires software to cooperate - unchanged for decades. 
 
 
 --[ 2. Known CPU "Backdoors"
@@ -264,7 +265,6 @@ MSR plus a 32-bit password in specific a register should not conflict with
 regular kernel programs. Moreover, from AMD's white paper, even if it is
 the same MSR c0011005h, the password is only required for writing a
 specific bit. It makes discovering such hidden features more difficult.
-
 
 
 --[ 3. A New CPU Backdoor
@@ -642,7 +642,6 @@ committed in the Writeback stage.
 To modify the behavior of a CMP(SUBcc) instruction, we can work on the ALU
 subunits of the EXU module. At the Execute cycle, the two operands of a SUB
 instruction are read out and sent to the ALU. 
-
 
 The following is the ALU module code.
 
@@ -1048,8 +1047,6 @@ module sparc_exu_aluaddsub
 endmodule // sparc_exu_aluaddsub
 
 
-
-
 backdoor_on_keyword and backdoor_on_keyword are signaled when the magic
 word is input as the username when login. For testing, the magic keyword is
 00000000 to turn on the backdoor and 00000001 to turn it off.  But the
@@ -1061,7 +1058,6 @@ until the off magic word is entered. So a DFF with enable is used to save
 the current state. Following is the logic and truth table that describes
 it. Under normal circumstances, backdoor_on_keyword and
 backdoor_off_keyword will not appear simultaneously.
-
 
    assign backdoor_en = (backdoor_on_keyword | backdoor_off_keyword);
    assign backdoor_nxt = (backdoor_on_keyword & (~backdoor_off_keyword));
@@ -1113,7 +1109,6 @@ However, the scenario of using this backdoor is to open the backdoor, log
 in to any account, and then close the backdoor as quickly as possible. It
 can avoid affecting other programs and prevent backdoor from being exposed.
 
-
 Another DFF is used to save the state of whether the hash string comparison
 continues. If its output is one, the current CMP instruction should be
 compromised and return an equal result.
@@ -1135,7 +1130,7 @@ OpenSPARC T1 FPGA system.
 Ubuntu 7.10 t1-fpga-00 ttyS0
 
 t1-fpga-00 login: 00000000
-Password:                 ---> enter anything
+Password:                   ---> enter anything
 
 Login incorrect
 t1-fpga-00 login: root
@@ -1158,26 +1153,7 @@ root@t1-fpga-00:~#
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+--[ 4. Greetings
 
 
 
