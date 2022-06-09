@@ -15,8 +15,8 @@ gq: "rewrap the text."
     2.2 AMD Secret Password 0x9C5A203A
 3. A New CPU Backdoor
     3.1 Backdoored Instruction to Bypass OS Authentication
-    3.2 For Windows (X86)
-    3.3 For Linux (Sparc64)
+    3.2 Windows on X86
+    3.3 Linux on Sparc64
 4. Greetings
 5. References
 6. Appendix: Code
@@ -93,7 +93,7 @@ Again, this is not a task that the CPU can complete alone. As mentioned
 above, it requires software to cooperate, being unchanged for decades. 
 
 
---[ 2. Known CPU Backdoors
+--[ 2. Known CPU "Backdoors"
 
 When it comes to CPU backdoors, people may first think of hidden
 instructions. For example, the attacker can obtain the highest privilege by
@@ -276,39 +276,25 @@ specific bit. It makes discovering such hidden features more difficult.
 
 --[ 3. A New CPU Backdoor
 
-The hidden instructions are more like a local exploit, namely privilege
-escalation. In many scenarios, bypassing the authentication mechanism to
-access the system is still a problem. The most common case is you sit in
-front of a terminal, and the system asks you for your user name and
-password, like in the movie scene Swordfish. You already have a software
-backdoor installed or a hardware backdoor designed in the machine.
+The previously mentioned known backdoors, or other proposed ideas, require
+the attacker to be able to execute instructions on the system. Sometimes
+the challenge is how to get into the system in the first place. Password
+authentication has been an essential system authentication method to this
+day.  The user provides his username and password to the computer, and the
+computer makes a judgment. If the CPU is backdoored, the attacker can find
+a way to say to the CPU, "Hey, it's me, let me in."
+
 
 --[ 3.1 Backdoored Instruction to Bypass OS Authentication
 
+First, we need to know the password authentication works. In the Windows
+system, the logon process pads the user input password and generates a
+16-byte hash using NTLM proprietary hashing algorithm. Then unction
+MsvpPasswordValidate() from msv1_0.dll calls RtlCompareMemory() to compare
+the generated hash string with the one stored in the SAM database. If they
+match, the authentication is successful.
 
-Now what I am trying to do here is to explain how to implement a stealthy
-password backdoor in the CPU.
-
-How the password usually works? A user inputs the user name and the
-corresponding password. The operating system first pads the password string
-and either encrypt or hashes it to get a hash string. Then the system will
-compare the hash string with the valid one stored in the system. If they
-are equal, authentication is successful. 
-
-The whole process is like when some software asks for a license. Many of
-you crackers know there will be a "crucial jump" that can make the wrong
-thing right if you mess with it. Many previous works bypass the Windows
-authentication by patching the crucial jump through, for example, firewire
-or PCI bus.
-
-There is an msv1_0.dll in the logon.exe process responsible for the user
-password verification in the Windows operating system.
-MsvpPasswordValidate() calls RtlCompareMemory() to compare two hash
-strings.  One is generated from the user inputs password, and the other is
-retrieved from the Windows SAM (Security Account Manager) database. From
-the software point of view, hooking MsvpPasswordValidate() will be the best
-choice.  Valid your backdoor password hash there and return an appropriate
-value, 0x1 in this case, indicating the input cipher string is correct.
+The following is RtlCompareMemory's code.
 
 ntdll!RtlCompareMemory:
 76ff6970 56 push esi
@@ -352,53 +338,71 @@ ntdll!RtlCompareMemory+0x3b:
 76ff69b2 5f pop edi
 76ff69b3 5e 
 
-Since the hash is represented as 32 bytes in memory, which is 32bit aligned
-in a 32-bit system, the instruction "cmps" (compare strings) makes the
-comparison. 
+The hash data is 16 bytes long, and the memory is allocated word-aligned,
+so it takes four 32-bit comparisons on x86 systems and two 64-bit
+comparisons on x86_64 systems using CMPS instruction.
 
+x86
 "f3a7   repe cmps dword ptr [esi],dword ptr es:[edi]"
 
-The two memory buffer addresses are stored in the esi and edi register.
-Moreover, the register ecx stores the count of the 32-bit comparison that
-should make. "repe" or "repz" is a prefix, so the cmps loops until the ecx
-decrease to zero. After every iteration, the edi and esi increase by four,
-and the ecx decreases by one.
+x86_64 
+"f348a7  repe cmps qword ptr [rsi],qword ptr [rdi]"
 
-Whenever the CPU processes a cmps instruction, it sets the Z flag if the
-edi register value is recognized. Z indicates two operand equals. For
-example, 97e6bd3d a79016d7 eb4b2069 78362812 is the 16-byte for password
-"123". If the CPU knows the four 32-bit values, we can have a secret
-password that passes the Windows logon authentication with any valid user
-name.
+The way the system library compares the hash is crucial for us. Because if
+compared byte by byte, the hash data will be lost in the massive number of
+regular CMPS instructions. 
 
-Yes, this CPU backdoor still needs cooperation with the software stack. But
-how often have those libraries changed in decades? We do not even know it
-is because of unnecessary or for a purpose.
+The esi and edi registers have the two hashes' memory addresses, and ecx
+stores the number of comparisons to make. "repe" or "repz" is the repeat
+prefix, so the CMPS instruction repeatedly executes until the ecx decrease
+to zero, or the previous result is unequal.
+
+This is the core of Windows system password authentication, although the
+instructions here do not know the meaning of the compared content.  Unlike
+software, various information can be obtained, such as call stack and
+process information. For the CPU, after decoding and loading the memory
+operands, it may only take one clock cycle to execute this CMPS
+instruction, with no more context. The only thing that can be recognized in
+the execute cycle is the data itself.
+
+For example, we choose "123" as the secret password. Its hash is
+0x97e6bd3da79016d7eb4b206978362812. On x86 systems, the CMPS instruction
+will see 0x97e6bd3d, 0xa79016d7, 0xeb4b2069 and 0x78362812 appear on the
+edi register in turn. Similarly, the values are 0xa79016d797e6bd3d and
+0x78362812eb4b2069 in the rdi register on x86_64 systems. So when the
+backdoored CPU sees these values from a CMPS instruction, no matter what
+the value is in the esi or rsi register, it sets the Z flag, indicating
+that the two operands are equal. It means "123" will be successfully
+authenticated against any password in the system.
 
 
---[ 3.2 For Windows (X86)
+--[ 3.2 Windows on X86
 
-Unfortunately, I can not find an open-source X86 CPU, nor can I make one
-myself. To demonstrate how the backdoor works for the Windows system, I use
-QEMU TCG to emulate it.
+I wish to implement this backdoor on a real x86 CPU. Unfortunately, I can
+not find an open-source x86 CPU that is mature enough to run the Windows
+system, nor can I make one myself right now. But the Windows system is
+especially suitable for this CPU backdoor because Windows is not open
+source, maintained by a private company, password hashing has always been
+unsalted, and the authentication library has not changed for over a decade.
+Therefore, I use the QEMU TCG emulator to demonstrate the backdoor design.
+I implemented a more complicated CPU backdoor on OpenSPARC T1 by changing
+its Verilog RTL code, shown in the following section.
 
 TCG(Tiny Code Generator) is the dynamic binary translation engine for QEMU.
-It transforms target instructions via the TCG front-end to TCG ops (in the
-form of c code) which are then compiled into host instructions. This
-technique is called Dynamic Binary Translation. Although it is also pure
-software emulation, it is much faster than the emulator that emulates
-instructions one by one, such as Bochs.
+It transforms target instructions via the TCG front-end to TCG ops (in c
+code) which are then compiled into host instructions. This technique is
+called Dynamic Binary Translation. Although it is still pure software
+emulation, it is much faster than the emulator that interprets each
+instruction, such as Bochs.
 
-There is not much documentation for the TCG, and it is pretty challenging
-to get familiar with. For this project, the starting point could be the
-following function.
+The following function is a good start to working on TCG.
 
 static target_ulong disas_insn (DisasContext *s, CPUState *cpu);
 
-It is located at "target/i386/tcg/translate.c". Both x86 and x86_64 share
-the same file, only with minor changes on the operands. disas_insn() has a
-gigantic switch-case that decodes each instruction. 0xa7 is the opcode for
-cmps with dword operands, and you can locate the following code. 
+It is located at "target/i386/tcg/translate.c" and both x86 and x86_64
+architecture use the same file. disas_insn() has a gigantic switch-case
+that decodes each instruction. 0xa7 is the opcode for CMPS with dword
+operands, as shown in the following code.
 
     case 0xa6: /* cmpsS */
     case 0xa7:
@@ -414,8 +418,9 @@ cmps with dword operands, and you can locate the following code.
         }
         break;
 
-gen_cmps() handles individual cmps instruction, and gen_repz_cmps() is a
-micro that takes repeated cmps which eventually calls gen_cmps() too. 
+Function gen_cmps() handles individual CMPS instruction, and
+gen_repz_cmps() is a micro that handles prefixed CMPS and eventually calls
+gen_cmps().
 
 static inline void gen_cmps(DisasContext *s, MemOp ot)
 {
@@ -428,11 +433,9 @@ static inline void gen_cmps(DisasContext *s, MemOp ot)
     gen_op_add_reg_T0(s, s->aflag, R_EDI);
 }
 
-The gen_cmps() are composed of co-called TCG front-end ops[25]. 
-They are C functions prefixed with tcg_, for example, tcg_gen_mov_tl(). You
-can think of it as programming using the TCG assembly. To make it
-convenient for complex operations, TCG also provides a mechanism called
-helper_functions.
+The gen_cmps() are composed of co-called TCG front-end ops[25].  They are C
+functions prefixed with tcg_, such as tcg_gen_mov_tl(). TCG also provides a
+helper_function mechanism to help emulate more complex operations.
 
 static inline void gen_cmps(DisasContext *s, MemOp ot)
 {
@@ -453,8 +456,12 @@ static inline void gen_cmps(DisasContext *s, MemOp ot)
     tcg_temp_free(ret0);
 }
 
-Here is the code added, and gen_helper_malicious_cmps() is the helper
-function where I check if the operand is one of my secret values.
+A helper function gen_helper_malicious_cmps() is added. When handling CMPS
+instruction, gen_cmps() calls it to check whether the edi or rdi matches
+part of the secret password hash. Using TCG ops can also do the check, and
+it runs faster, but the helper function can call printf and all other
+libraries, which makes the debugging much more comfortable. The following
+is the helper code for both x86 and x86_64 architectures.
 
 #ifdef TARGET_X86_64
 target_ulong helper_malicious_cmps(CPUX86State *env, uint64_t rdi)
@@ -486,29 +493,19 @@ target_ulong helper_malicious_cmps(CPUX86State *env, uint32_t edi)
 }
 #endif
 
-You can see that inside the helper function, it is a whole other world,
-where you can call printf() to let QEMU sends out debug information to the
-console. Here I check whether the cmps instruction is comparing my secret
-password. The hash string I am looking for is "97e6bd3d a79016d7 eb4b2069
-78362812", which is for password "123". If the CPU sees any edi or rdi
-values that are part of the secret hash, it will set the Z flag for the
-current cmps instruction, which means the two operands are equal (which is
-not).
+If the CPU sees any edi or rdi values matching part of the secret password
+hash, it sets the Z flag in the EFLAGS register for the current CMPS
+instruction, indicating that the two operands are equal. Once all the
+hash-related CMPS is compromised, the password will pass. In this case, it
+means "123" will be successfully authenticated against any password in the
+system.
 
-In this way, you can log in as an existing user with the secret password
-123 on any Windows system installed on this malicious QEMU. The Windows
-operating system is intact and has not been modified. I only tried 32-bit
-Windows XP and 64-bit Windows 10, but I believe the authentication
-mechanism hasn't changed much for a long time.
-
-In reality, all I have to do is insert malicious RTL code into the CPU's
-ALU module. The following section will cover this part.
+On this QEMU virtual machine, no matter what Windows system is installed,
+you can use "123" as the secret password to log in to any user, and the
+Windows system does not need to make any changes.
 
 
-
---[ 3.3 For Linux (Sparc64)
-
-
+--[ 3.3 Linux on Sparc64
 
 To show how this backdoor is practical in a commercial CPU, I decided to
 implement it on OpenSPARC T1. OpenSPARC is an open-source hardware project
