@@ -96,8 +96,8 @@ above, it requires software to cooperate - unchanged for decades.
 
 --[ 2. Known CPU "Backdoors"
 
-When it comes to CPU backdoors, people may first think of hidden
-instructions. For example, the attacker can obtain the highest privilege by
+People may first think of hidden instructions when it comes to CPU
+backdoors. For example, the attacker can obtain the highest privilege by
 executing a particular instruction. Indeed, there are undocumented
 instructions[5][6][7][8]. Examing the opcode space from the manual, we know
 that there must be many opcodes that are not documented or not used yet.
@@ -106,11 +106,11 @@ and it is not hard to enumerate all possible instructions.  But still,
 there may have some unreviled extension byte for those variety length
 instruction architecture, such as x86.
 
-The opcode partially pasted in the following is the 2-byte opcode map.
-Those instructions' first bye is 0F, which is an escape code. Let's take
-some examples to see how it works. In the first row, the INVD instruction
-should be 0F08. WBINVD is 0F09. In the fourth row, vmovapd should be
-660F28, because the map says it has a prefix 66.
+The opcode partially pasted in the following is the 2-byte opcode map from
+Intel. Those instructions' first bye is 0F, which is an escape code. Let's
+take some examples to see how it works. In the first row, the INVD
+instruction should be 0F08. WBINVD is 0F09. In the fourth row, vmovapd
+should be 660F28, because the map says it has a prefix 66.
 
 
 +---------------------------------------------         -------------------+
@@ -144,31 +144,32 @@ should be 0F08. WBINVD is 0F09. In the fourth row, vmovapd should be
 
 There are also many blanks on the map. For example, 0F0A is blank here, so
 it is either an undocumented or invalid instruction. The ALTINST(0F3F) we
-will talk about later also leaves a blank. In this case, it is a not-fully
--documented instruction of the VIA CPU. The manual mentioned the existence
-of this alternative instruction but did not fully describe how to use it.
-Instead, the customers need to call the vendor to get detailed information.
+will discuss later also leaves a blank. In this case, it is a not-fully
+-documented instruction of the VIA CPU. Its manual mentioned the existence
+of this alternative instruction but did not fully describe how to use it
+(the alternate instruction set is not revealed).  Instead, the customers
+need to call the vendor to get detailed information.
 
 The map also shows "3-byte escape" in the seventh row, which means the
-instructions begin with 0F38 or 0F3A, which are the escape code, and the
-following byte also needs to be decoded. We could look up the corresponding
-3-byte opcode map to find more instructions of this kind. Although in the
-Intel manual, the 3-byte opcode is already the most, in theory, the
-subsequent bytes could also be escape code. Also, the blank between 0F38
-and 0F3A may make people wonder what 0F39 is. Is it an undocumented
-instruction or an undocumented escape code? And what about other blanks.
-Therefore I argue that this is where we should start digging, finding all
-the escape code, instead of enumerating the whole encoding space from
-scratch.
+instructions' opcode is 3-byte long, beginning with 0F38 or 0F3A, which are
+the escape code, and the following byte also needs to be decoded. We could
+look up the corresponding 3-byte opcode map to find more instructions in
+this category. Although in the Intel manual, the 3-byte opcode is already
+the most, the subsequent bytes could also be escape code in theory. Also,
+the blank between 0F38 and 0F3A may make people wonder what 0F39 is. Is it
+an undocumented instruction or an undocumented escape code? And what about
+other blanks. Therefore I argue that this is where we should start digging,
+finding all the escape code, instead of enumerating the whole encoding
+space from scratch.
 
 In another situation, the instruction is documented, but it may require
 some particular value put in a register to trigger it[15][16][27]. Like
 CPUID, with different register values, it can query various CPU
-information. A debugging function of the AMD CPU needs to be turned on like
-this. We hope to have a mysterious instruction that can give us something
-unique but not affect the system's regular operations, so it will not be
-easily discovered. Maybe using particular register values for triggering is
-a better approach, especially on 64-bit systems.
+information. Some debugging function of the AMD CPU needs to be turned on
+like this. In this way, not only can we have the mysterious functions but
+also not affect the system's regular operations, and it will not be easily
+discovered. Maybe this is a better approach, especially on 64-bit systems
+because of the enormous conflict space.
 
 
 --[ 2.1 VIA C3 ALTINST Instructions
