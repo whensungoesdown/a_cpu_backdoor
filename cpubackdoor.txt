@@ -11,7 +11,7 @@ gq: "rewrap the text."
 
 1. Introduction
 2. Known CPU "Backdoors"
-    2.1 VIA C3 Nehemiah ALTINST instruction 
+    2.1 VIA C3 ALTINST Instructions 
     2.2 AMD Secret Password 0x9C5A203A
 3. A New CPU Backdoor
     3.1 Backdoored Instruction to Bypass OS Authentication
@@ -170,47 +170,40 @@ easily discovered. Maybe using particular register values for triggering is
 a better approach, especially on 64-bit systems.
 
 
---[ 2.1 VIA C3 Nehemiah ALTINST instruction 
+--[ 2.1 VIA C3 ALTINST Instructions
 
-ALTINST stands for alternation instruction, and it is documented in the
-manual[9] for tests and particular uses. The alternate
-instruction set has additional registers and different instruction forms of
-the x86 instruction architecture. It can run privileged instruction from
-any protection level,  bypass memory descriptor checks, and many x86
-exceptions such as alignment checks. These instructions are undocumented,
-and they are considered RISC-microcode that runs internally in the CPU.
+The VIA C3 processor has an instruction called ALTINST[9] encoding 0F 3F.
+This instruction is officially documented in the C3 manual, and ALTINST is
+the gate instruction to the alternate instruction set. This alternate
+instruction set includes an extended set of integer, MMX, floating-point,
+and 3DNow! instructions, additional registers, and more powerful
+instruction forms over the x86 instruction architecture. For example, in
+the alternate instruction set, privileged functions can be used from any
+protection level, memory descriptor checking can be bypassed, and many x86
+exceptions such as alignment check can be bypassed. These instructions are
+undocumented and are believed to be RISC-like microcodes that run
+internally in the CPU.
 
-To run these instructions, it needs a unique mechanism. First, set the FCR
-(FEATURE CONTROL REGISTER) ALTINST bit to one using WRMSR, a privileged
-instruction that writes MSR (Model Specific  Register). The use of a
-privileged operation represents that the ALTINST is designed as a debugging
-function. After that, a new two-byte jump instruction 0x0F3F is enabled. In
-the x86 architecture opcode map, 0x0F is an escape byte that leads to the
-following byte parsed as part of the opcode, and 0x0F38 and 0x0F3A are also
-the escape bytes. However, 0x0F3F is an invalid instruction, as shown
-in~\autoref{tab:opcode-map}.
+"This alternate instruction set is intended for testing, debug, and special
+application usage. Accordingly, it is not documented for general usage. If
+you have a justified need for access to these instructions, contact your
+VIA representative." Says the manual.
 
-The 0x0F3F jump instruction has no operand. If FCR.ALTINST is zero, the
-execution of 0x0F3F causes an invalid instruction exception. Otherwise, it
-directly causes a near branch to CS: EAX. In addition to the branch, the
-0x0F3F instruction sets the processor into an internal model where the
-target bytes are not interpreted as x86 instructions but as unknown
-instruction set instructions.
+Using these instructions requires the ALTINST bit to be set to 1 in FCR
+(FEATURE CONTROL REGISTER) MSR using WRMSR instruction. If ALTINST is 0,
+the execution of 0F3F causes an Invalid Instruction exception. Once the
+ALTINST bit is set, the 0F3F instruction can be executed from any privilege
+level, and it causes a near branch to CS:EAX. In addition to the branch,
+the 0x0F3F instruction sets the processor into an internal mode where the
+target bytes are not interpreted as x86 instructions but rather as
+alternate instruction set instructions.
 
-Moreover, the alternate instructions also use a particular format instead
-of plain binary. They are in units of 32 bits, and each instruction is
-prefixed with 0x8D8400. The alternate instructions are presented as the
-32-bit displacement of an LEA instruction, LEA [EAX+EAX+disp]. When
-executing, the 0x8D8400 prefix is stripped off, and the 32-bit alternate
-instruction in the displacement field will be executed. The alternate
-instruction set also has a branch instruction that returns control to x86
-normal mode. Regarding the instruction format, the processor manual does
-not provide more details.
-
-However, research work[10] and the VIA processor microarchitecture-related
-patents[11][12][13][14] show that the alternate instruction set is likely
-to be ARM. Verifying the alternate instructions is out of the scope of this
-paper.
+The alternate instructions fetched following the 0x0F3F branch should be of
+the form 0x8D8400XXXXXXXX where 0xXXXXXXXX is the 32-bit alternate
+instruction, which is presented as the 32-bit displacement of an LEA
+[EAX+EAX+disp]. The LEA "wrapper" is stripped off upon fetching, and the
+32-bit alternate instruction is executed. This is where this set of
+alternate instructions looks like a backdoor because if the disassembler 
 
 
 --[ 2.2 AMD Secret Password 0x9C5A203A
@@ -1199,6 +1192,8 @@ root@t1-fpga-00:~#
     searching. 
 [8] Uncovering Hidden Instructions in Armv8-A Implementations. 
 [9] VIA C3 Nehemiah Datasheet, 2004.
+    http://datasheets.chipdb.org/VIA/Samuel2/VIA%20C3%20Samuel%202%20
+    Datasheet%20V1.12.pdf
 [10] Hardware backdoors in x86 CPUs. Black Hat, 2018.
 [11] Apparatus and method for limiting access to model specific registers
      in a microprocessor, December 25 2012. US Patent 8,341,419.
