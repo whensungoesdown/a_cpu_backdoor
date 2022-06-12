@@ -17,9 +17,13 @@ gq: "rewrap the text."
     3.1 Backdoored Instruction to Bypass OS Authentication
     3.2 Windows on X86
     3.3 Linux on Sparc64
-4. Greetings
-5. References
-6. Appendix: Code
+4. Misc
+    4.1 X86 SSE AVX Instruction Sets
+    4.2 Notes on Xilinx FPGA Tool
+5. Conclusion
+6. Greetings
+7. References
+8. Appendix: Code
 
 
 --[ 1. Introduction
@@ -172,7 +176,7 @@ discovered. Maybe this is a better approach, especially on 64-bit systems
 because of the enormous conflict space.
 
 
---[ 2.1 VIA C3 ALTINST Instructions
+----[ 2.1 VIA C3 ALTINST Instructions
 
 The VIA C3 processor has an instruction called ALTINST[9] encoding 0F 3F.
 This instruction is officially documented in the C3 manual, and ALTINST is
@@ -220,7 +224,7 @@ to be ARM. Studying the alternate instruction set is out of the scope of
 this paper.
 
 
---[ 2.2 AMD Secret Password 0x9C5A203A
+----[ 2.2 AMD Secret Password 0x9C5A203A
 
 MSR (Model Specific Register) are the various control registers in the x86
 instruction set used for debugging, program execution tracing, computer
@@ -291,7 +295,7 @@ system makes a judgment. If the CPU is backdoored, the attacker can find a
 way to say to the CPU, "Hey, it's me, let me in."
 
 
---[ 3.1 Backdoored Instruction to Bypass OS Authentication
+----[ 3.1 Backdoored Instruction to Bypass OS Authentication
 
 First, we need to know how password authentication works. In the Windows
 system, the logon process pads the user input password and generates a
@@ -383,7 +387,7 @@ that the two operands are equal. It means "123" will be successfully
 authenticated against any password in the system.
 
 
---[ 3.2 Windows on X86
+----[ 3.2 Windows on X86
 
 I wish to implement this backdoor on a real x86 CPU. Unfortunately, I can
 not find an open-source x86 CPU mature enough to run the Windows system,
@@ -1149,7 +1153,10 @@ avoid conflict with other regular CMP instructions. Hence, once the
 attacker successfully enters the system, the backdoor should be closed as
 soon as possible. 
 
-The following output logs demonstrate how the CPU backdoor works on the OpenSPARC T1 with Ubuntu 7.10 installed. The system runs on the Xilinx ML505-V5LX110T FPGA board, and the console is established through the serial port.
+The following output logs demonstrate how the CPU backdoor works on the
+OpenSPARC T1 with Ubuntu 7.10 installed. The system runs on the Xilinx
+ML505-V5LX110T FPGA board, and the console is established through the
+serial port.
 
 
 Ubuntu 7.10 t1-fpga-00 ttyS0
@@ -1172,19 +1179,89 @@ applicable law.
 root@t1-fpga-00:~# 
 
 
+When logging into the system, first enter 00000000, then the backdoor is
+activated, but this login attempt should fail because it is very likely
+that the account 00000000 does not exist on the system. After that, If the
+attacker knows a username or uses root, he can enter this account by typing
+anything as the password.
+
+This backdoor can be applied to ssh remote login as long as the ssh service
+is configured with password authentication. The previously mentioned
+backdoor on Windows x86 also works with Windows Remote Desktop. These are
+all based on password authentication, and invoked modules are the same as
+the local password login.
 
 
 
+--[ 4. Misc 
+
+----[ 4.1 X86 SSE AVX instruction sets
+
+----[ 4.2 Notes on Xilinx FPGA Tool
+
+"OpenSPARC T1 Processor Design and Verification User's Guide" and
+"OpenSPARC™ Internals" are two excellent books about OpenSPARC T1, which
+have a detailed tutorial on how to compile the processor and generate the
+bitstream file.
+
+The OpenSPARC T1 project supports multiple EDA and FPGA tools for
+simulation and synthesizing, such as VCS, NCVerilog, Design Compiler,
+Synplicity Pro, and XST(Xilinx Synthesis Technology).
+
+Xilinx EDK(Embedded Development Kit) and ISE(Integrated Synthesis
+Environment) are required to place and route a design on a Xilinx FPGA,
+download the design to the Xilinx FPGA.
+
+I have tested them on Ubuntu20.04, which is not the same as the book says.
+The ISE version needs to use 9.1i, and the EDK version requires 10.1 sp3.
+The good news is that these older versions are free. The bad news is that
+they need some old version libs that are difficult to find.
+
+Here are some notes.
+
+1) microblaze_7_10_d IP missing.
+
+Install EDK10.1 sp3.
 
 
+2) ERROR:MDT - IPNAME:hard_ethernet_mac_wrapper INSTANCE:hard_ethernet_mac
+...  License missing. 
 
---[ 4. Greetings
+Find the corresponding license and put it in the
+Xilinx/10.1/ISE/coregen/core_licenses/ directory.
 
 
+3) Error occurred during initialization of VM
+java/lang/NoClassDefFoundError: java/lang/Object
+ERROR:coreutil - Aborting COREGEN execution!
+
+The java j2se (Xilinx/10.1/ISE/java/) that comes with ISE10.1 is too old.
+Install Java SE Development Kit 5.0u22.
+https://download.oracle.com/otn/java/jdk/1.5.0_22/jdk-1_5_0_22-linux
+-amd64.bin
+
+Replace Xilinx/10.1/ISE/java/lin64/jre directory with the new one
+installed.
 
 
+4.ERROR:Bitgen - Unknown PLL_ADV site  in pminfo.
 
---[ 5. References
+Xilinx/10.1/ISE/virtex5/lib/lin64/libBsRain_Bitgen.so has a bug. In the
+function BsRain_BfdTile::plladvpminfo, there seems to be an unnecessray
+string destructor, Port::StringBase<char>::~StringBase((StringBase<char>
+*)&local_48);_ZN4Port10StringBaseIcED1Ev@plt.
+
+Patch it solves the issue.
+
+
+--[ 5. Conclusion
+
+--[ 6. Greetings
+
+Special thanks to my wife uay and our two kids, Ray and Summer :)
+
+
+--[ 7. References
 
 [1] https://wiki.qemu.org/Documentation/TCG/frontend-ops
 [2] SPARC Assembly Language Reference Manual
