@@ -18,7 +18,7 @@ gq: "rewrap the text."
     3.2 Windows on X86
     3.3 Linux on Sparc64
 4. Misc
-    4.1 X86 SSE AVX Instruction Sets
+    4.1 X86 SSE/AVX Instruction Sets
     4.2 Notes on Xilinx FPGA Tool
 5. Conclusion
 6. Greetings
@@ -1195,7 +1195,88 @@ the local password login.
 
 --[ 4. Misc 
 
-----[ 4.1 X86 SSE AVX instruction sets
+----[ 4.1 x86 SSE/AVX Instruction Set
+
+When disassembling the strcmp() on an x86_64 Linux machine, the resulting
+function is actually __strcmp_avx2(), which is an optimized version that
+uses the avx2 instruction set. The following is part of the code.
+
+(gdb) disassemble 
+Dump of assembler code for function __strcmp_avx2:
+=> 0x00007ffff7f30ae0 <+0>:	endbr64 
+   0x00007ffff7f30ae4 <+4>:	mov    %edi,%eax
+   0x00007ffff7f30ae6 <+6>:	xor    %edx,%edx
+   0x00007ffff7f30ae8 <+8>:	vpxor  %ymm7,%ymm7,%ymm7
+   0x00007ffff7f30aec <+12>:	or     %esi,%eax
+   0x00007ffff7f30aee <+14>:	and    $0xfff,%eax
+   0x00007ffff7f30af3 <+19>:	cmp    $0xf80,%eax
+   0x00007ffff7f30af8 <+24>:	jg     0x7ffff7f30e50 <__strcmp_avx2+880>
+   0x00007ffff7f30afe <+30>:	vmovdqu (%rdi),%ymm1
+   0x00007ffff7f30b02 <+34>:	vpcmpeqb (%rsi),%ymm1,%ymm0
+   0x00007ffff7f30b06 <+38>:	vpminub %ymm1,%ymm0,%ymm0
+   0x00007ffff7f30b0a <+42>:	vpcmpeqb %ymm7,%ymm0,%ymm0
+   0x00007ffff7f30b0e <+46>:	vpmovmskb %ymm0,%ecx
+   0x00007ffff7f30b12 <+50>:	test   %ecx,%ecx
+   0x00007ffff7f30b14 <+52>:	je     0x7ffff7f30b90 <__strcmp_avx2+176>
+...
+
+
+AVX(Advanced Vector Extensions) are extensions to the x86 instruction set
+architecture for microprocessors from Intel and AMD. AVX uses sixteen YMM
+registers to perform a single instruction on multiple pieces of data,
+so-called SIMD instructions. AVX2 and AVX512 are subsequently extended
+instruction sets.
+
+In fact, functions like strcmp() can have many versions, depending on which
+instruction extensions are supported by the system's CPU. Using those SIMD
+instruction sets can speed up the strcmp() function. For example, the
+following code shows that glibc provides multiple versions, including AVX2.
+
+/* Support sysdeps/x86_64/multiarch/strcmp.c.  */
+IFUNC_IMPL (i, name, strcmp,
+            IFUNC_IMPL_ADD (array, i, strcmp,
+                            HAS_ARCH_FEATURE (AVX2_Usable),
+                            __strcmp_avx2)
+            IFUNC_IMPL_ADD (array, i, strcmp, HAS_CPU_FEATURE (SSE4_2),
+                            __strcmp_sse42)
+            IFUNC_IMPL_ADD (array, i, strcmp, HAS_CPU_FEATURE (SSSE3),
+                            __strcmp_ssse3)
+            IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2_unaligned)
+            IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2))
+
+This mechanism is called IFUNC(Indirect Function)[17]. It is a feature of
+the GNU toolchain that allows a developer to create multiple
+implementations of a given function and select amongst them at runtime
+using a resolver function also written by the developer. The dynamic loader
+calls the resolver function during early startup to resolve which
+implementations will be used by the application. Once an implementation
+choice is made, it is fixed and may not be changed for the process's
+lifetime.
+
+The main idea of the string comparison (byte or dword) using AVX2 consists
+of comparing (VPCMPEQ) two ymm vectors. Because ymm are 256-bit register,
+one VPCMPEQ instruction can compare strings of 32 bytes(VEC_SIZE) long. If
+not considering null char and the strings being away from page boundary,
+the following two instructions can make the comparison for 32 bytes.
+
+vmovdqu (%rdi),%ymm1
+vpcmpeqb (%rsi),%ymm1,%ymm0
+
+vmovdqu takes the memory address from the rdi register and reads 32 bytes
+into the ymm1 register. Then vpcmpeqb, with rsi as the memory address,
+reads 32 bytes, compares it with the data in ymm1 as 32 pairs, and stores
+the result in ymm0. If a pair of data are equal, the corresponding data
+element in the destination operand is set to all 1s. Otherwise, it is set
+to all 0s.
+
+So the vpcmpeqb instruction is the one that compares data, and it is a more
+safe place for hosting the CPU backdoor. Because it can compare more chars,
+the backdoor keywords and hash strings can be distinguished more precisely.
+Moreover, these SSE or AVX vector instructions are primarily used for data
+processing. Even if there is a conflict between data and backdoor keywords,
+it is less likely to affect the program's regular operation, and errors may
+be submerged in massive data calculations.
+
 
 ----[ 4.2 Notes on Xilinx FPGA Tool
 
@@ -1296,3 +1377,4 @@ Special thanks to my wife uay and our two kids, Ray and Summer :)
      https://www.theregister.com/2010/11/15/amd_secret_debugger/
 [16] AMD Undocumented Machine-Specific Registers
      http://cbid.softnology.biz/html/undocmsrs.html
+[17] https://sourceware.org/glibc/wiki/GNU_IFUNC
