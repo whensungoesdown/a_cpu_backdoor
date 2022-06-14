@@ -1337,6 +1337,23 @@ Patch it solves the issue.
 
 --[ 5. Conclusion
 
+This article presents a practical CPU backdoor that bypasses the mainstream
+operating system's password authentication. The backdoor prototype is
+implemented on the OpenSPARC T1 processor and tested on the Xilinx
+ML505-V5LX110T FPGA board with the Ubuntu7.10 OS.
+
+We argue that it is challenging to create a CPU backdoor entirely by
+hardware. Instead, the hardware should cooperate with the upper-layer
+software. While people believe software constantly changes, hardware
+doesn't change once it's made. However, many crucial software libraries,
+intentionally or unintentionally, haven't changed for years. 
+
+We hope this is just the beginning. There must be various ways for a CPU to
+backdoor the system. NTLMv2, Kerberos, OpenSSL, MBEDTLS, Intel AES
+Instruction Set,  are these things can related and create new CPU
+backdoors?
+
+
 --[ 6. Greetings
 
 Special thanks to my wife uay and our two kids, Ray and Summer :)
