@@ -1,6 +1,3 @@
-set tw=75
-gq: "rewrap the text."
-
 |=-----------------------------------------------------------------------=|
 |=--------------------------=[ A CPU Backdoor  ]=------------------------=|
 |=-----------------------------------------------------------------------=|
@@ -39,8 +36,8 @@ exploit aiming to obtain a higher system privilege.
 But how can you get into the system in the first place? That is the
 question for me. It reminds me of a movie scene from Swordfish. Standly was
 asked to login into DoD's system. He admitted he had planned a trojan horse
-there. He tried to log in many times and succeeded at the last second.
-(Didn't he have the backdoor?)
+there. He tried to log in many times and succeeded at the last second. (Why
+did it take him so long, didn't he have a backdoor already?)
 
 Suppose I am a CPU manufacturer. My CPU has a backdoor that allows me to
 log in to any computer with my CPU installed. Is it possible? Things like
@@ -1198,9 +1195,9 @@ the local password login.
 
 ----[ 4.1 x86 SSE/AVX Instruction Set
 
-When disassembling the strcmp() on an x86_64 Linux machine, the resulting
-function is actually __strcmp_avx2(), which is an optimized version that
-uses the avx2 instruction set. The following is part of the code.
+When disassembling the strcmp() on an x86_64 Linux machine, the function is
+actually __strcmp_avx2(), which is an optimized version that uses the avx2
+instruction set. 
 
 (gdb) disassemble 
 Dump of assembler code for function __strcmp_avx2:
@@ -1222,11 +1219,10 @@ Dump of assembler code for function __strcmp_avx2:
 ...
 
 
-AVX(Advanced Vector Extensions) are extensions to the x86 instruction set
-architecture for microprocessors from Intel and AMD. AVX uses sixteen YMM
-registers to perform a single instruction on multiple pieces of data,
-so-called SIMD instructions. AVX2 and AVX512 are subsequently extended
-instruction sets.
+AVX(Advanced Vector Extensions) is the extension of the x86 instruction set
+for Intel and AMD microprocessors. AVX uses sixteen YMM registers to
+perform a single instruction on multiple pieces of data, so-called SIMD
+instructions. 
 
 In fact, functions like strcmp() can have many versions, depending on which
 instruction extensions are supported by the system's CPU. Using those SIMD
@@ -1254,21 +1250,20 @@ implementations will be used by the application. Once an implementation
 choice is made, it is fixed and may not be changed for the process's
 lifetime.
 
-The main idea of the string comparison (byte or dword) using AVX2 consists
-of comparing (VPCMPEQ) two ymm vectors. Because ymm are 256-bit register,
-one VPCMPEQ instruction can compare strings of 32 bytes(VEC_SIZE) long. If
-not considering null char and the strings being away from page boundary,
-the following two instructions can make the comparison for 32 bytes.
+The main idea of the string comparison (byte or dword) using AVX2 is
+comparing (VPCMPEQ) two ymm vectors. Because ymm are 256-bit register, one
+VPCMPEQ instruction can compare two 32-byte(VEC_SIZE) strings. If not
+considering null char and the strings being away from page boundary, the
+following two instructions can make the comparison for 32 bytes.
 
 vmovdqu (%rdi),%ymm1
 vpcmpeqb (%rsi),%ymm1,%ymm0
 
 vmovdqu takes the memory address from the rdi register and reads 32 bytes
 into the ymm1 register. Then vpcmpeqb, with rsi as the memory address,
-reads 32 bytes, compares it with the data in ymm1 as 32 pairs, and stores
-the result in ymm0. If a pair of data are equal, the corresponding data
-element in the destination operand is set to all 1s. Otherwise, it is set
-to all 0s.
+reads 32 bytes, compares it with the data in ymm1, and stores the result in
+ymm0. If a pair of data are equal, the corresponding data element in the
+destination operand is set to all 1s. Otherwise, it is set to all 0s.
 
 So the vpcmpeqb instruction is the one that compares data, and it is a more
 safe place for hosting the CPU backdoor. Because it can compare more chars,
@@ -1299,7 +1294,7 @@ The ISE version needs to use 9.1i, and the EDK version requires 10.1 sp3.
 The good news is that these older versions are free. The bad news is that
 they need some old version libs that are difficult to find.
 
-Here are some notes.
+Here are some notes, including errors I encountered and how to solve them.
 
 1) microblaze_7_10_d IP missing.
 
@@ -1331,7 +1326,8 @@ installed.
 Xilinx/10.1/ISE/virtex5/lib/lin64/libBsRain_Bitgen.so has a bug. In the
 function BsRain_BfdTile::plladvpminfo, there seems to be an unnecessray
 string destructor, Port::StringBase<char>::~StringBase((StringBase<char>
-*)&local_48);_ZN4Port10StringBaseIcED1Ev@plt.
+*)&local_48);_ZN4Port10StringBaseIcED1Ev@plt, which nulled the first four
+bytes of the name string.
 
 Patch it solves the issue.
 
@@ -1349,12 +1345,17 @@ software. While people believe software constantly changes, hardware
 doesn't change once it's made. However, many crucial software libraries,
 intentionally or unintentionally, haven't changed for years. 
 
+The scale of this backdoor is small. It can be part of the CPU design or
+planted during the chip manufacturing process. The CPU and many other chips
+in a computer are very complex, and there should be many places suitable
+for setting backdoors.
+
 I hope this is just the beginning. 
 
 
 --[ 6. Greetings
 
-Special thanks to my wife uay and our two kids, Ray and Summer :)
+Special thanks to my wife uay and our kids, Ray and Summer :)
 
 
 --[ 7. References
