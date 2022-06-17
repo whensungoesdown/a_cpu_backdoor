@@ -18,7 +18,7 @@
     4.1 X86 SSE/AVX Instruction Sets
     4.2 Notes on Xilinx FPGA Tool
 5. Conclusion
-6. Greetings
+6. Acknowledgements
 7. References
 8. Appendix: Code
 
@@ -548,38 +548,38 @@ account, and the Windows system does not need to make any changes.
 
 --[ 3.3 Sparc64 (OpenSPARC T1) on FPGA
 
-To show this backdoor is real and it is possible that backdoors may exist
-in commercial CPUs, I implemented it on OpenSPARC T1. OpenSPARC is an
+To show this backdoor is feasible and it is possible that backdoors may
+exist in commercial CPUs, I implemented it on OpenSPARC T1. OpenSPARC is an
 open-source hardware project that started in December 2005. OpenSPARC T1 is
 the open-source version of the Sun Microsystems' UltraSPARC T1, which is a
 multithreading, multicore CPU, code name Niagara.
 
-OpenSPARC T1 contains multiple sparc cores, which is a single-issue,
-in-order, 6-stage pipeline core. The source code is available under GNU
-General Public License v2. Xilinx's OpenSPARC Evaluation Platform is an
-FPGA board designed for hosting a whole OpenSPARC T1 system, including CPU,
-DDR memory controller, ethernet, etc. With the source code, Xilinx EDA
-tools, and the FPGA board, that is the closest I can get to testing on a
-commercial CPU.
+OpenSPARC T1 contains multiple sparc cores, a single-issue, in-order,
+6-stage pipeline core. The source code is available under GNU General
+Public License v2. Xilinx's OpenSPARC Evaluation Platform(ML505-V5LX110T)
+is an FPGA board designed to host a complete OpenSPARC T1 system, including
+CPU and DDR memory controller, ethernet, etc. With the source code, Xilinx
+EDA tools, and the FPGA board, this is the closest I can get to testing on
+a commercial CPU.
 
-The OpenSPARC project also provides two ramdisk images that can run on top
-of the FPGA emulated system, SunOS 5.11 and Ubuntu7.10. Those systems are
-old. They both have a 64-bit kernel, but the user-mode programs are
-32-bits. According to the "SPARC Assembly Language Reference Manual[2]," a
-32-bit program could use the entire length of some 64-bit registers.  "The
-global registers and the output registers can be used to hold 64-bit
-integer values, but the input registers and the local registers can only be
-used to hold 32-bit values in the lower half of the register."
+The OpenSPARC project provides two ramdisk images that can run on top of
+the FPGA emulated system, SunOS 5.11 and Ubuntu7.10. Those systems are old.
+They both have a 64-bit kernel, but the user-mode programs are 32-bits.
+According to the "SPARC Assembly Language Reference Manual[2]," a 32-bit
+program could use the entire length of some 64-bit registers.  "The global
+registers and the output registers can be used to hold 64-bit integer
+values, but the input registers and the local registers can only be used to
+hold 32-bit values in the lower half of the register."
 
 Although the Linux distro Ubuntu7.10's libc-2.6.1.so is a 32-bit version,
-its strcmp() uses 64-bit registers. Eventually, a CMP instruction with
-64-bit register operands compares the strings when their memory addresses
-are both 8-byte aligned. Otherwise, the strcmp() compares them byte by
-byte.
+its strcmp() uses 64-bit registers. Eventually, the strcmp() executes a CMP
+instruction with 64-bit register operands to compare the strings if their
+memory addresses are both 8-byte aligned. Otherwise, the comparison is made
+byte by byte.
 
-LDXA reads 64-bit data as operands in the following code, respectively, and
-the CMP instruction compares the two operands. Those o2, o3, g1, g2, and g3
-are 64-bit registers.
+As the following code shows, LDXA reads 64-bit data and the CMP instruction
+compares two 64-bit operands. Those o2, o3, g1, g2, and g3 are 64-bit
+registers.
 
                              LAB_0018d310         XREF[2]:     0018d328(j),
         0018d310 90 02 20 08     add        __s1,0x8,__s1
@@ -591,23 +591,22 @@ are 64-bit registers.
         0018d328 22 6f ff fa     bpe,a,pt   %xcc,LAB_0018d310
         0018d32c d6 da 50 48     _ldxa      [__s2+__s1] 0x82,o3
 
+
 I also studied Debian 9.0, a 64-bit system on the SPARC64 platform. Its
 libpam and libc are very similar to their Ubuntu7.10 SPARC32+ versions. It
 shows that, at the instruction level, from the perspective of our CPU
 backdoor, the Linux system (more specifically, the Debian system) has not
 changed much over the years. Although on Debian9.0, strcmp() uses XOR
-instead of CMP to make the comparison. Unfortunately, that small change can
-make the current backdoor implementation ineffective. That is also the
-reason we argue that even hardware backdoors need software assistance. Our
-backdoor would be invalid if we originally designed the backdoor on the CMP
-instruction and the later system used the XOR instead. Maybe the CPU vendor
-can convince the compiler guys not to make the change if it matters. Or we
-foresee this and leave the backdoor on both instructions. Still, the
-reality is that a lot of elderly code runs perfectly on billions of
-computers. As previously mentioned, the Windows authentication library
-msv1_0.dll is a good example. 
+instead of CMP to make the comparison. However, that small change can make
+the backdoor ineffective if we implement the backdoor on the CMP
+instruction. It is also the reason we argue that even hardware backdoors
+need software assistance or at least stay the same. Maybe the CPU vendor
+can convince the compiler guys not to make the change. Or we can foresee it
+and leave the backdoor on both instructions. Still, the reality is that a
+lot of elderly code runs perfectly on billions of computers. As previously
+mentioned, the Windows authentication library msv1_0.dll is a good example. 
 
-Unlike Glibc, SunOS 5.11's libc only uses 32-bit operands. It is not
+Unlike Ubuntu, SunOS 5.11's libc only uses 32-bit operands. It is not
 surprising since the libc used by these two systems does not have a common
 heritage. This backdoor needs to be slightly modified to support SunOS, but
 for simplicity, this paper only considers the ubuntu case.
@@ -649,30 +648,30 @@ the first username in a *nix system.
 When the CPU sees these two values, the backdoor is opened and looks for
 subsequent hash comparisons. Then, "$1$" appears in both rs1 and rs2
 registers, indicating a hash comparison begins. Why is the whole hash
-string instead of only the hash part? Because this is the way *nix hash
-libraries work. For example, crypt() is a hash function for the shadow
+string compared instead of only the hash part? Because this is the way *nix
+hash libraries work. For example, crypt() is a hash function for the shadow
 file.
 
 char * crypt(const char *phrase, const char *setting);
 
 
 The libpam passes both the user input password and the hash string from the
-/etc/shadow file to the crypt() function.
+/etc/shadow file to the crypt().
 
 pp = crypt("passwordinputed", "$1$somesalt$hashedstring");
 
 
 The returned value is a pointer to the newly generated hash string, and
-later they are sent to strcmp() for comparison. 
+later it is sent to strcmp()  with the stored hash string for comparison. 
 
 ret = strcmp(pp, stored_hash);
 
 
 So the goal is to let the CPU recognize hash strings and tamper with the
 result when the backdoor is active. For each CMP instruction, the ALU
-yields the CMP's outcome as zero, indicating the two operands are
-identical. Subsequent hash comparisons are compromised as well. Eventually,
-a null byte inside the operand shows that this is the last part of the hash
+yields the its outcome as zero, indicating the two operands are identical.
+Subsequent hash comparisons should be compromised as well. Eventually, a
+null byte inside the operand shows that this is the last part of the hash
 because the hash strings end with zero. 
 
 Now, here is a little background on the OpenSPARC T1 core. It is a
@@ -686,15 +685,15 @@ instructions from the cache/memory, and the EXU executes them.
 
 The core pipeline consists of six stages: Fetch, Switch, Decode, Execute,
 Memory, and Writeback. The IFU includes Fetch, Switch, and Decode. The EXU
-contains the Execute stage of the pipeline and consists of four subunits
+contains the Execute stage of the pipeline and has four subunits
 ALU(Arithmetic and logic unit), SHFT(Shifter), IMUL(Integer multiplier),
 and IDI(Integer divider).
 
 Ths SPARC core has hardware support for four strands(virtual processor) and
-each strand has a full register file. The Fetch cycle loads instructions to
-the instruction registers from the icache. The Switch stage selects which
-strand to run. Then the selected strand's next-instruction is decoded at
-the Decode stage. The register file access also happens at this time. At
+each strand has a full register file. The Fetch cycle loads instructions
+from the icache to the instruction registers. The Switch stage selects
+which strand to run. Then the selected strand's next-instruction is decoded
+at the Decode stage. The register file access also happens at this time. At
 the Execute stage, all arithmetic and logical operations take place. The
 LSU also calculates the memory address during this cycle, and the data
 cache is accessed at the Memory stage. Finally, all instructions are
@@ -872,22 +871,24 @@ module sparc_exu_alu
    
 endmodule  // sparc_exu_alu
 
-It contains sparc_exu_alulogic and sparc_exu_aluaddsub modules. The
-sparc_exu_alulogic is responsible for logical operations, while
-sparc_exu_aluaddsub calculates addition and subtraction. Because the
-backdoor is on SUBcc instruction, so the sparc_exu_aluaddsub module is our
-target. 
 
-In this module, we almost get all the signals we need to implement the
-backdoor. For example, byp_alu_rs1_data_e and byp_alu_rs2_data_e are the
-two operands value. ecl_alu_cin_e and ifu_exu_invert_d indicate whether
-this operation is an addition or subtraction. However, we also need to know
-about the rd signal. The rd is the destination register index, indicating
-which register needs to be updated in the final Writeback stage. CMP is a
-pseudo-instruction. When the compiler generates binary, "CMP reg rs1 ,
-reg_or_imm" actually is "SUBcc reg rs1 , reg_or_imm, %g0".  Its target
-register is the read-only g0 register, meaning that the instruction does
-not care about the calculation result but only sets the flag.
+It is long, but basically, it contains sparc_exu_alulogic and
+sparc_exu_aluaddsub modules. The sparc_exu_alulogic is responsible for
+logical operations, while sparc_exu_aluaddsub calculates addition and
+subtraction. Because the backdoor is on CMP instruction, so the
+sparc_exu_aluaddsub module is our target. 
+
+The sparc_exu_aluaddsub module almost gets all the signals needed to
+implement the backdoor. For example, byp_alu_rs1_data_e and
+byp_alu_rs2_data_e are the two operands value. ecl_alu_cin_e and
+ifu_exu_invert_d indicate whether this operation is an addition or
+subtraction. But we also have to know about the rd signal. The rd is the
+destination register index, indicating which register needs to be updated
+in the final Writeback stage. CMP is a pseudo-instruction. When the
+compiler generates binary, "cmp reg rs1 , reg_or_imm" actually is "subcc
+reg rs1 , reg_or_imm, %g0". Its target register is the read-only g0
+register, meaning that the instruction does not care about the calculation
+result but only sets the flag.
 
 We need this information to differentiate between CMP and regular SUBcc
 instructions. The rd index is encoded in the instruction, which is
@@ -967,8 +968,8 @@ generated in the Decode stage, requiring a pipeline register to bring it to
 the next stage. ecl_alu_cin_e is the carry bit, but it works oppositely for
 subtraction. ecl_alu_cin_e is 1 in the SUB instruction, and ecl_alu_cin_e
 is 0 in the SUBC(SUB with Carry). sparc_exu_aluspr is a module for
-comparing operation with carrying bit, which yields zero if the two
-operands are equal.
+comparing operation with carry bit, which yields zero if the two operands
+are equal.
 
 If the ALU compares hash strings while the backdoor is activated, the
 outcome of the sparc_exu_aluspr and sparc_exu_aluadder64 modules should be
@@ -1111,12 +1112,12 @@ When the ALU catches the magic keywords in operands, the
 backdoor_on_keyword and backdoor_off_keyword will be signaled. For testing
 purpose, the magic keyword "00000000" activate the backdoor and "00000001"
 to turn it off. These two signals are only combination logic that is only
-valid during the current cycle. Therefore a DFF with enable bit is used to
-save it for subsequent instructions. The following is the logic for
-backdoor_en and backdoor_nxt and the truth table. Usually,
+valid during the current cycle. Therefore a DFF(D Flip Flop) with enable
+bit is used to save it for subsequent instructions. The following is the
+logic for backdoor_en and backdoor_nxt and the truth table. Usually,
 backdoor_on_keyword and backdoor_off_keyword should not be signaled at the
-same time, and the backdoor_nxt could be optimized by assigning
-backdoor_on_keyword.
+same time (if so, the backdoor_nxt could be optimized by assigning
+backdoor_on_keyword).
 
    assign backdoor_en = (backdoor_on_keyword | backdoor_off_keyword);
    assign backdoor_nxt = (backdoor_on_keyword & (~backdoor_off_keyword));
@@ -1137,12 +1138,13 @@ When the backdoor is activated, it will compromise all subsequent hash
 comparisons. However, ALU does not have a context to know whether it is
 executing under the same thread, and not only arithmetic instructions need
 ALU. For example, load and branch instructions also use ALU to calculate
-offsets. In addition, OpenSPARC T1 supports hardware multithreading. All
-these factors can cause the backdoor to tamper with the results of other
-instructions by mistake. Notably, in the strcmp() code listed above, a SUB
-instruction is just before the CMP instruction. For this reason, it is
-necessary to distinguish CMP and other instructions through rd. The signal
-issubrd0 indicates that the current instruction is a CMP.
+offsets. In addition, OpenSPARC T1 supports hardware multithreading, which
+means that four virtual processors share the same ALU. All these factors
+can cause the backdoor to tamper with the results of other instructions by
+mistake. Notably, in the strcmp() code listed above, a SUB instruction is
+right before the CMP instruction. For this reason, it is necessary to
+distinguish CMP and other instructions through rd. The signal issubrd0
+indicates that the current instruction is a CMP.
 
    assign issubrd0 = (5'h0 == ecl_alu_rd_e[4:0]) & sub_e & ecl_alu_cin_e;
 
@@ -1158,7 +1160,7 @@ C1              0x4331
 
 
 Signal hash_begin is set when the foremost part of hash strings appears in
-the ALU. Signal hash_00 indicates this is the last piece of the hash
+the ALU. Signal hash_00 indicates that this is the last piece of the hash
 string. The middle part of the hash string has no noticeable pattern,
 except that each byte is a printable character. 
 
@@ -1169,8 +1171,9 @@ except that each byte is a printable character.
                   & (8'h0 == byp_alu_rs2_data_e[47:40]);
    assign hash_end = hash_r & hash_00 & issubrd0;
 
-Thus, to handle all the hash comparisons,  a 1-bit DFF(D Flip Flop) is used
-to record whether the hash has started, as shown in the following code.
+
+Thus, to handle all the hash comparisons,  a 1-bit DFF is used to record
+whether the hash has started.
 
    assign hash_en = (hash_begin | hash_end) & backdoor_r;
    assign hash_nxt = hash_begin & (~hash_end);
@@ -1181,11 +1184,11 @@ to record whether the hash has started, as shown in the following code.
 
    assign trigger_backdoor = (hash_r | hash_begin) & issubrd0;
 
-The code above shows that hash_dffe only functions when the backdoor is
-active because hash_en, the enable bit, is also determined by the
-backdoor_r signal. If both the hash_r and issubrd0 are signaled, it
-triggers the backdoor for the current CMP instruction, whose output will
-then be zeroed. 
+
+The hash_dffe only functions when the backdoor is active because hash_en,
+the enable bit, is also determined by the backdoor_r signal. If both the
+hash_r and issubrd0 are signaled, it triggers the backdoor for the current
+CMP instruction, whose output will then be zeroed. 
 
    assign spr_out[63:0] = spr_out_tmp[63:0] & {64{~trigger_backdoor}}; 
    assign adder_out[63:0] = adder_out_tmp[63:0] & {64{~trigger_backdoor}};
@@ -1195,9 +1198,9 @@ For the backdoor to support more hash algorithms, it needs more
 combinational logic to distinguish different hash strings, such as those
 starting with $1$ and $6$. But on the other hand, more combinational logic
 may require a longer propagation time, which may violate the processor's
-timing. Thus the backdoor's logic can not be too complicated.  For testing,
-this part of the logic is a bit hardcoded. These simple rules alone may not
-be enough to avoid conflict with other regular CMP instructions. Hence,
+timing. Thus the backdoor's logic can not be too complicated. For testing,
+this part of the logic is a bit hardcoded, and these simple rules alone may
+not be enough to avoid conflict with other regular CMP instructions. Hence,
 once the attacker successfully enters the system, the backdoor should be
 closed as soon as possible. 
 
@@ -1230,8 +1233,9 @@ serial port.
 This is how the backdoor works. First, enter 00000000 as the username. As
 previously explained, it activates the backdoor. But this login attempt
 should fail because the user account 00000000 does not exist in the system.
-Then, the attacker could use any user account he knows to log in, in this
-case, the root. No password is required and there shows the # prompt.
+Then, the attacker could use any valid user account to log in, in this
+case, the root. No password is required and there shows the # prompt. To
+turn off the backdoor, run login again and enter 00000001 as the username.
 
 The backdoor can be applied to ssh remote login as long as the ssh service
 is configured with password authentication. The previously mentioned
@@ -1288,6 +1292,7 @@ IFUNC_IMPL (i, name, strcmp,
             IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2_unaligned)
             IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2))
 
+
 This mechanism is called IFUNC(Indirect Function)[17]. It is a feature of
 the GNU toolchain that allows a developer to create multiple
 implementations of a given function and select amongst them at runtime
@@ -1317,8 +1322,8 @@ safe place for hosting the CPU backdoor. Because it can compare more chars,
 the backdoor keywords and hash strings can be distinguished more precisely.
 Moreover, these SSE or AVX vector instructions are primarily used for data
 processing. Even if there is a conflict between data and backdoor keywords,
-it is less likely to affect the program's regular operation, and errors may
-be submerged in massive data calculations.
+it is less likely to affect the program's control flow, and errors may be
+submerged in massive data calculations.
 
 
 ----[ 4.2 Notes on Xilinx FPGA Tool
@@ -1333,13 +1338,12 @@ simulation and synthesizing, such as VCS, NCVerilog, Design Compiler,
 Synplicity Pro, and XST(Xilinx Synthesis Technology).
 
 Xilinx EDK(Embedded Development Kit) and ISE(Integrated Synthesis
-Environment) are required to place and route a design on a Xilinx FPGA,
-download the design to the Xilinx FPGA.
-
-I have tested them on Ubuntu20.04, which is not the same as the book says.
-The ISE version needs to use 9.1i, and the EDK version requires 10.1 sp3.
-The good news is that these older versions are free. The bad news is that
-they need some old version libs that are difficult to find.
+Environment) are required to place and route a design on a Xilinx FPGA and
+download the design to the Xilinx FPGA. I have tested them on Ubuntu20.04,
+which is not the same as the book says. The ISE version needs to use 9.1i,
+and the EDK version requires 10.1 sp3. The good news is that these older
+versions are free. The bad news is that they need some old version libs
+that are difficult to find.
 
 Here are some notes, including errors I encountered and how to solve them.
 
@@ -1359,7 +1363,7 @@ Xilinx/10.1/ISE/coregen/core_licenses/ directory.
 java/lang/NoClassDefFoundError: java/lang/Object
 ERROR:coreutil - Aborting COREGEN execution!
 
-The java j2se (Xilinx/10.1/ISE/java/) that comes with ISE10.1 is too old.
+The java j2se (Xilinx/10.1/ISE/java/) that comes with ISE9.1i is too old.
 Install Java SE Development Kit 5.0u22.
 https://download.oracle.com/otn/java/jdk/1.5.0_22/jdk-1_5_0_22-linux
 -amd64.bin
@@ -1388,21 +1392,22 @@ ML505-V5LX110T FPGA board with the Ubuntu7.10 OS.
 
 We argue that it is challenging to create a CPU backdoor entirely by
 hardware. Instead, the hardware should cooperate with the upper-layer
-software. While people believe software constantly changes, hardware
-doesn't change once it's made. However, many crucial software libraries,
+software. While people believe that software constantly changes, hardware
+does not change once made. However, many crucial software libraries,
 intentionally or unintentionally, haven't changed for years. 
 
 The scale of this backdoor is small. It can be part of the CPU design or
-planted during the chip manufacturing process. The CPU and many other chips
-in a computer are very complex, and there should be many places suitable
-for setting backdoors.
+planted during chip manufacturing. The CPU and many other chips in a
+computer are very complex, and there should be many places suitable for
+setting backdoors.
 
 I hope this is just the beginning. 
 
 
---[ 6. Greetings
+--[ 6. Acknowledgements
 
-Special thanks to my wife uay and our kids, Ray and Summer :)
+Thank you, my wife uay, and my kids Ray and Summer! You always tolerate my
+bad temper. I love you!
 
 
 --[ 7. References
@@ -1447,7 +1452,7 @@ Special thanks to my wife uay and our kids, Ray and Summer :)
 --[ 8. Appendix: Code
 
 Both OpenSPARCT1 and QEMU are large projects, so I only put part of the
-code with backdoor implementation in the code.tar.gz.
+code with the backdoor implementation in the code.tar.gz.
 
 The complete projects can be found here:
 
