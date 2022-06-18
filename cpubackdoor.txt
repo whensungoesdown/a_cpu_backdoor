@@ -598,13 +598,13 @@ shows that, at the instruction level, from the perspective of our CPU
 backdoor, the Linux system (more specifically, the Debian system) has not
 changed much over the years. Although on Debian9.0, strcmp() uses XOR
 instead of CMP to make the comparison. However, that small change can make
-the backdoor ineffective if we implement the backdoor on the CMP
-instruction. It is also the reason we argue that even hardware backdoors
-need software assistance or at least stay the same. Maybe the CPU vendor
-can convince the compiler guys not to make the change. Or we can foresee it
-and leave the backdoor on both instructions. Still, the reality is that a
-lot of elderly code runs perfectly on billions of computers. As previously
-mentioned, the Windows authentication library msv1_0.dll is a good example. 
+the backdoor ineffective if we only implement the backdoor on the CMP
+instruction. We argue that even hardware backdoors need software assistance
+or at least stay the same. Maybe the CPU vendor can convince the compiler
+guys not to make the change. Or we can foresee it and leave the backdoor on
+both instructions. Still, the reality is that a lot of elderly code runs
+perfectly on billions of computers. As previously mentioned, the Windows
+authentication library msv1_0.dll is a good example. 
 
 Unlike Ubuntu, SunOS 5.11's libc only uses 32-bit operands. It is not
 surprising since the libc used by these two systems does not have a common
@@ -655,14 +655,14 @@ file.
 char * crypt(const char *phrase, const char *setting);
 
 
-The libpam passes both the user input password and the hash string from the
-/etc/shadow file to the crypt().
+The libpam passes both the user input password and the hash string stored
+in the /etc/shadow file to the crypt().
 
 pp = crypt("passwordinputed", "$1$somesalt$hashedstring");
 
 
 The returned value is a pointer to the newly generated hash string, and
-later it is sent to strcmp()  with the stored hash string for comparison. 
+later it is sent to strcmp() with the stored hash string for comparison. 
 
 ret = strcmp(pp, stored_hash);
 
@@ -1172,7 +1172,7 @@ except that each byte is a printable character.
    assign hash_end = hash_r & hash_00 & issubrd0;
 
 
-Thus, to handle all the hash comparisons,  a 1-bit DFF is used to record
+Thus, to handle all the hash comparisons, a 1-bit DFF is used to record
 whether the hash has started.
 
    assign hash_en = (hash_begin | hash_end) & backdoor_r;
@@ -1188,7 +1188,10 @@ whether the hash has started.
 The hash_dffe only functions when the backdoor is active because hash_en,
 the enable bit, is also determined by the backdoor_r signal. If both the
 hash_r and issubrd0 are signaled, it triggers the backdoor for the current
-CMP instruction, whose output will then be zeroed. 
+CMP instruction, whose output will then be zeroed. A DFF needs setup time
+to get an update at the next clock rising edge; hence hash_r will be
+updated one clock cycle behind hash_nxt. Thus, hash_begin is also necessary
+to signal the trigger_backdoor.
 
    assign spr_out[63:0] = spr_out_tmp[63:0] & {64{~trigger_backdoor}}; 
    assign adder_out[63:0] = adder_out_tmp[63:0] & {64{~trigger_backdoor}};
