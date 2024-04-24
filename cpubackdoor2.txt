@@ -108,7 +108,7 @@ username can still be transmitted as clear text to the CPU before
 authentication. The operating system also plays a crucial role,
 particularly by maintaining critical code unchanged for decades.
 
-The paper is structured into three main sections. Firstly, we delve into
+The paper is structured into three main sections. Firstly, we investigate
 background information on existing CPU "backdoors." Then, we demonstrate
 our new CPU backdoor. Finally, we discuss potential directions for future
 research.
@@ -166,7 +166,7 @@ map, which specifies a prefix of 66.
 
 The map also contains numerous blanks, like 0F0A, which could denote either
 an undocumented or invalid instruction. Another example is 0F3F at the
-bottom right, which we'll delve into later, also leaving a blank. In this
+bottom right, which we'll discuss later, also leaving a blank. In this
 instance, it represents a partially documented instruction from the VIA's
 x86 CPU, known as ALTINST (alternate instruction). Although VIA's manual
 acknowledges the existence of this alternative instruction, it lacks
@@ -1380,8 +1380,8 @@ the ROM code's first task is to retrieve the public key and verify its hash
 against the one stored in ROM. Ultimately, the root of trust relies on
 comparing these two hash strings.
 
-Let's delve into how digital signatures work, using RSA (RSASSA-PKCS1-V1_5)
-as an example.
+Let's examine how digital signatures work, using RSA (RSASSA-PKCS1-V1_5) as
+an example.
 
 Assume "bin" is the entity to be verified and "bin_sig" is its digital
 signature. Here's the process for verifying a signature using the public
