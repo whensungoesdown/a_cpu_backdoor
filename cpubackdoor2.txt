@@ -302,7 +302,7 @@ challenging.
 ----[ 2.3 Backdoor Instruction Candidates
 
 Fully documented and benign, this instruction sparks a clever idea worth
-mentioning. It is the OR instruction in the IBM Power ISA.
+mentioning. It is the OR instruction in the IBM Power ISA[19].
 
 "or RA,RS,RB: The contents of register RS are ORed with the contents of
 register RB and the result is placed into register RA. Some forms of or
@@ -1532,6 +1532,7 @@ patient with me, even when I'm not at my best. Love you guys!
      http://cbid.softnology.biz/html/undocmsrs.html
 [17] https://sourceware.org/glibc/wiki/GNU_IFUNC
 [18] Designing and implementing malicious hardware
+[19] https://openpower.foundation/specifications/isa/
 
 
 --[ 8. Appendix: Code
