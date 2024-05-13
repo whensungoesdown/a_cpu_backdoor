@@ -233,10 +233,11 @@ LEA [EAX+EAX+disp]. Upon fetching, the LEA "wrapper" is removed, and the
 if the disassembler interprets 0F3F as a NOP, then all subsequent x86
 instructions seem genuine.
 
-Furthermore, research [10] and VIA processor microarchitecture-related
-patents [11][12][13][14] suggest that the alternate instruction set is
-likely to be ARM. However, a detailed investigation into the alternate
-instruction set falls outside the scope of this paper.
+This topic has been discussed [10]. Moreover, patents related to VIA
+processor microarchitecture [11][12][13][14] suggest that the alternate
+instruction set likely consists of internal microinstructions. However, an
+in-depth investigation into this alternate instruction set is not the focus
+of this paper.
 
 
 ----[ 2.2 AMD Secret Password 0x9C5A203A
