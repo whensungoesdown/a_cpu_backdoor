@@ -549,7 +549,8 @@ target_ulong helper_malicious_cmps(CPUX86State *env, uint32_t edi)
 
 
 /* if d == OR_TMP0, it means memory operand (address in A0) */
-static void gen_malicious_op(DisasContext *s1, int op, MemOp ot, int d, TCGv ret0)
+static void gen_malicious_op(DisasContext *s1, int op, MemOp ot, int d,
+TCGv ret0)
 {
 
 ...
