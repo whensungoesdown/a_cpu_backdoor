@@ -1496,8 +1496,8 @@ Hope this marks just the start of exploring CPU backdoors.
 
 --[ 6. Acknowledgements
 
-A huge thanks to my wife uay and my kids Ray and Summer! You're always
-patient with me, even when I'm not at my best. Love you guys!
+Thanks to my wife uay and my kids Ray and Summer! You're always patient
+with me, even when I'm not at my best. Love you guys!
 
 
 --[ 7. References
