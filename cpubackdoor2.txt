@@ -426,10 +426,11 @@ with a single microinstruction dedicated to the comparison process.
 
 ----[ 3.2 Prototype on x86 QEMU TCG
 
-I really wish I could put this backdoor on a real x86 CPU. But right now, I
-can't find an open-source x86 CPU good enough for running the Windows
-system, and I can't build one myself. So, for now, I'll demonstrate the
-backdoor design using the QEMU TCG emulator.
+I really wish I could put this backdoor on a real x86 CPU. But I can't find
+an open-source x86 CPU capable of running the Windows system (NT kernel)
+yet, and making one myself isn't feasible at the moment (although I'm
+exploring the ao486_MiSTer as a potential starting point). So, for now,
+I'll demonstrate the backdoor design using the QEMU TCG emulator.
 
 TCG (Tiny Code Generator) serves as the dynamic binary translation engine
 for QEMU. It converts target instructions through TCG frontend-ops, which
