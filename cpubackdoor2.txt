@@ -410,13 +410,14 @@ However, it lacks software-level context, only the data itself can be
 recognized.
 
 Let's take "123" as the secret password, with its hash being
-0x97e6bd3da79016d7eb4b206978362812. During the CMPS instruction on x86 systems,
-the edi register holds the memory pointer, sequentially reading the data
-0x97e6bd3d, 0xa79016d7, 0xeb4b2069, and 0x78362812. On x86_64 systems, the data
-in the 64-bit thunk consists of 0xa79016d797e6bd3d and 0x78362812eb4b2069. When
-the backdoored CPU encounters these values during CMPS, it sets the Z flag,
-indicating equality regardless of the actual memory content. This results in
-"123" successfully authenticating against any password in the system.
+0x97e6bd3da79016d7eb4b206978362812. During the CMPS instruction on x86
+systems, the edi register holds the memory pointer, sequentially reading
+the data 0x97e6bd3d, 0xa79016d7, 0xeb4b2069, and 0x78362812. On x86_64
+systems, the data in the 64-bit thunk consists of 0xa79016d797e6bd3d and
+0x78362812eb4b2069. When the backdoored CPU encounters these values during
+CMPS, it sets the Z flag, indicating equality regardless of the actual
+memory content. This results in "123" successfully authenticating against
+any password in the system.
 
 The CMPS instruction is rather complicated. It performs two memory loads
 followed by a comparison. In actual x86 CPUs, it is decoded into microcode,
