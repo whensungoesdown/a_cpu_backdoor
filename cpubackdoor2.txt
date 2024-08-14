@@ -17,7 +17,7 @@
     3.3 Prototype on Sparc64 (OpenSPARC T1) FPGA
 4. Misc
     4.1 X86 SSE/AVX Instruction Sets
-    4.2 Crazy Ideas
+    4.2 Crazy Thoughts
     4.3 Notes on Xilinx FPGA Tool
 5. Conclusion
 6. Acknowledgements
@@ -90,7 +90,7 @@ indicate that the hash is correct. This deception allows the user to log in
 with the predefined secret password.
 
 To demonstrate the feasibility of implementing this backdoor on a
-commercial CPU, I opted to develop it on OpenSPARC T1, which is the
+commercial CPU, I chose to implement it on OpenSPARC T1, which is the
 open-source variant of the Sun Microsystems UltraSPARC T1. OpenSPARC offers
 a Xilinx EDK (Embedded Development Kit) project, enabling the T1 system to
 run on a Xilinx ML505-V5LX110T FPGA board. This setup allowed me to test
@@ -1369,7 +1369,7 @@ easier to identify the hash string, less likely trigger the backdoor by
 mistake.
 
 
-----[ 4.2 Crazy Ideas
+----[ 4.2 Crazy Thoughts
 
 In a computer system, trust begins with the firmware. The CPU executes an
 initial code stored in ROM/OTPROM (One-Time Programmable ROM), which
