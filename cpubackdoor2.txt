@@ -1052,21 +1052,21 @@ module sparc_exu_aluaddsub
    wire [63:0]  spr_out_tmp;   // result of sum predict
    wire [63:0]  adder_out_tmp; // result of adder
    wire         alu_ecl_cout32_e_tmp;
-   wire 	backdoor_on_keyword;
-   wire		backdoor_off_keyword;
-   wire		backdoor_nxt;
-   wire		backdoor_r;
-   wire		backdoor_en;
-   wire		trigger_backdoor;
-   wire		hash_begin;
-   wire		hash_end;
-   wire		hash_00;
-   wire		hash_r;
-   wire		hash_en;
-   wire		hash_nxt;
+   wire         backdoor_on_keyword;
+   wire         backdoor_off_keyword;
+   wire         backdoor_nxt;
+   wire         backdoor_r;
+   wire         backdoor_en;
+   wire         trigger_backdoor;
+   wire         hash_begin;
+   wire         hash_end;
+   wire         hash_00;
+   wire         hash_r;
+   wire         hash_en;
+   wire         hash_nxt;
 
-   wire		issubrd0;
-   wire		sub_e;
+   wire         issubrd0;
+   wire         sub_e;
 
 ////////////////////////////////////////////
 //  Module implementation
