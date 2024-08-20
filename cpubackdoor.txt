@@ -27,14 +27,14 @@
 
 --[ 1. Introduction
 
-The whole CPU backdoor thing is pretty wild. People are always speculating
-if they're real or not. It's hard to believe big tech giants like IBM,
-Intel, and AMD never even thought about putting them in. Backdoors,
-especially CPU ones, should be like super stealthy Kungfu moves, saved for
-breaking into the most fortified systems as a last resort. It reminds me of
-that scene in "Swordfish" where Standly's trying to hack into the DoD's
-system. He's already planted a trojan horse, so eventually he gets in. (But
-seriously, if he already had a backdoor, why all the drama?) 
+The whole CPU backdoor thing is pretty wild. People are always wondering if
+they're real or not. It's hard to believe big tech giants like IBM, Intel,
+and AMD never even thought about putting them in. Backdoors, especially CPU
+ones, should be like super stealthy Kungfu moves, saved for breaking into
+the most fortified systems as a last resort. It reminds me of that scene in
+"Swordfish" where Standly's trying to hack into the DoD's system. He's
+already planted a trojan horse, so eventually he gets in. (But seriously,
+if he already had a backdoor, why all the drama?) 
 
 When discussing CPU backdoors, hidden instructions often immediately come
 to mind. However, to activate them, attackers typically require the
