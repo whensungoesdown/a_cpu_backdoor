@@ -410,7 +410,7 @@ However, it lacks software-level context, only the data itself can be
 recognized.
 
 Let's take "123" as the secret password, with its hash being
-0x97e6bd3da79016d7eb4b206978362812. During the CMPS instruction on x86
+"3dbde697d71690a769204beb12283678". During the CMPS instruction on x86
 systems, the edi register holds the memory pointer, sequentially reading
 the data 0x97e6bd3d, 0xa79016d7, 0xeb4b2069, and 0x78362812. On x86_64
 systems, the data in the 64-bit thunk consists of 0xa79016d797e6bd3d and
