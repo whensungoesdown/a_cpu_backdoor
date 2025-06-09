@@ -1308,7 +1308,8 @@ than ever.
 Microcode serves as an ideal middle ground between software emulation and
 physical silicon hardware. It could also be the perfect hiding place for
 real-world backdoors, embedded directly in the CPU, easy for vendors to
-update, and capable of supporting sophisticated malicious functionality[20].  
+update, and capable of supporting sophisticated malicious
+functionality[20].  
 
 The microcode format is not publicly documented and it is embedded in the
 CPU's internal memory, with updates only available in encrypted packages.
@@ -1326,9 +1327,9 @@ since the Intel Pentium Pro and AMD K6 processors. These CPUs employ
 multiple advanced instruction decoders to break down complex x86 CISC
 instructions into simpler RISC-style microcode for execution.
 
-Quote from an old AMD document[22]: "The AMD-K6 processor uses a combination
-of decoders to convert x86 instructions into RISC86 operations. The
-hardware includes four decoders: 
+Quote from an old AMD document[22]: "The AMD-K6 processor uses a
+combination of decoders to convert x86 instructions into RISC86 operations.
+The hardware includes four decoders: 
 
 Two parallel short decoders - These translate the most commonly used x86
 instructions into zero, one, or two RISC86 operations each. They are also
@@ -1354,8 +1355,8 @@ Pioneering work by Ermolov, Sklyarov, and Goryachy has achieved critical
 breakthroughs in this domain through their research on Intel's Goldmont
 microarchitecture. Their research uncovered a critical vulnerability in TXE
 firmware that permits arbitrary code execution and achieves privileged "red
-unlock" status[23][24], effectively bypassing conventional microcode security
-protections.
+unlock" status[23][24], effectively bypassing conventional microcode
+security protections.
 
 Furthermore, their discovery of previously undocumented UDBGRD/UDBGWR
 instructions[30][26] provides direct access to the internal CRBUS (Control
@@ -2010,8 +2011,8 @@ configuring SDAT/PDAT with address, array, bank, and other parameters,
 specific memory arrays can be read or written. It is unclear to me how this
 was reverse-engineered, whether through direct analysis or by referencing
 some XML files containing register address definitions. Previous
-research[30][32][27][33] provides these definitions, which I include here for
-easy reference.
+research[30][32][27][33] provides these definitions, which I include here
+for easy reference.
 
 
  SDAT Bitfield:
@@ -2406,14 +2407,14 @@ with me, even when I'm not at my best. Love you guys!
 [17] https://sourceware.org/glibc/wiki/GNU_IFUNC
 [18] Designing and implementing malicious hardware
 [19] https://openpower.foundation/specifications/isa/
-[20] Alexander Krog and Alexander Skovsende. Backdoor in the Core - Altering
-    the Intel x86 Instruction Set at Runtime. Defcon 31, 2023 
+[20] Alexander Krog and Alexander Skovsende. Backdoor in the Core - 
+     Altering the Intel x86 Instruction Set at Runtime. Defcon 31, 2023 
 [21] RISC86 INSTRUCTION SET. US Patent US5926642, 1999
 [22] AMD-K6 Processor Technical Brief
-    https://www.ardent-tool.com/CPU/docs/AMD/K6/k6_techb.pdf
+     https://www.ardent-tool.com/CPU/docs/AMD/K6/k6_techb.pdf
 [23] IntelTXE-PoC. https://github.com/ptresearch/IntelTXE-PoC
 [24] https://www.intel.com/content/www/us/en/security-center/advisory/
-    intel-sa-00086.html
+     intel-sa-00086.html
 [25] uCodeDisam. https://github.com/chip-red-pill/uCodeDisasm
 [26] udbgInstr https://github.com/chip-red-pill/udbgInstr
 [27] lib-micro. https://libmicro.dev
