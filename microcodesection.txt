@@ -1,4 +1,4 @@
---[ 3.4 Prototype on Intel Goldmont CPU with Microcode
+--[ 3.4 Intel Goldmont x86 Microcode-Based Backdoor Implementation
 
 To validate the backdoor concept for x86, I developed a prototype using
 QEMU’s TCG. However, as a software emulation, it inevitably has
@@ -10,7 +10,7 @@ studies[112][101][105][109][114] have emerged, making microcode more accessible
 than ever.
 
 
---[ 3.4.1 Microcode Background
+--[ 3.4.1 Microcode Basics
 
 Microcode serves as an ideal middle ground between software emulation and
 physical silicon hardware. It could also be the perfect hiding place for
@@ -74,7 +74,7 @@ All these efforts together have opened new avenues for deeper analysis of
 processor internals.
 
 
---[ 3.4.2 CMPS Microcode
+--[ 3.4.2 CMPS Microcode Analysis
 
 Identifying the microcode entry point for the CMPS instruction is
 relatively straightforward due to its characteristic usage of architectural
@@ -244,7 +244,7 @@ SIGEVENT remains unclear, the hook has been placed at U3cc8 instead of the
 cmps entry point U08b0 to avoid unintended side effects.
 
 
---[ 3.4.3 CMPS Backdoor
+--[ 3.4.3 CMPS Backdoor Implementation
 
 Now let's break down how this CMPS backdoor actually works. The mechanism
 is straightforward: when executed, it checks the memory location pointed to
@@ -356,7 +356,7 @@ of the same model with different steppings may have MSROM variations due to
 accumulated microcode patches.
 
 
---[ 3.4.4 Patch through Coreboot 
+--[ 3.4.4 Installing Microcode Backdoors via Coreboot 
 
 As introduced earlier, the attack scenario assumes that the CPU vendor
 implants a backdoor in the silicon during production. In the context of
@@ -564,7 +564,7 @@ idx p src   dst
 31: 0 0x0000  0x0000
 
 
---[ 3.4.6 CRBUS, LDAT and Arrays
+--[ 3.4.6 CRBUS, LDAT and Memory Arrays
 
 An important aspect need to be covered is how data is read from MSROM and
 written to MSRAM. These operations rely on two critical components: CRBUS
