@@ -24,8 +24,8 @@
          3.4.6 CRBUS, LDAT and Memory Arrays
 4. Misc
     4.1 X86 SSE/AVX Instruction Sets
-    4.2 Crazy Thoughts
-    4.3 Notes on Xilinx FPGA Tool
+    4.2 Other Thoughts
+    4.3 Xilinx FPGA Toolchain Notes
 5. Conclusion
 6. Acknowledgements
 7. References
@@ -2235,7 +2235,7 @@ easier to identify the hash string, less likely trigger the backdoor by
 mistake.
 
 
-----[ 4.2 Crazy Thoughts
+----[ 4.2 Other Thoughts
 
 In a computer system, trust begins with the firmware. The CPU executes an
 initial code stored in ROM/OTPROM (One-Time Programmable ROM), which
@@ -2292,7 +2292,7 @@ CPU during string comparison and allowed to pass. I am not sure if this is
 possible, but it's definitely a interesting idea to think about.
 
 
-----[ 4.3 Notes on Xilinx FPGA Tool
+----[ 4.3 Xilinx FPGA Toolchain Notes
 
 "OpenSPARC T1 Processor Design and Verification User's Guide" and
 "OpenSPARC Internals" are both excellent resources on OpenSPARC T1. These
