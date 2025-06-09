@@ -1299,7 +1299,7 @@ limitations. My long-term goal was to design my own x86 core, but that goal
 is still far and remains ongoing. At the time, I considered microcode as an
 alternative, but its inner mechanism were still too obscure. Now, in 2025,
 three years after completing the earlier phase of this research, new
-studies[112][101][105][109][114] have emerged, making microcode more accessible
+studies[30][20][23][27][32] have emerged, making microcode more accessible
 than ever.
 
 
@@ -1308,12 +1308,12 @@ than ever.
 Microcode serves as an ideal middle ground between software emulation and
 physical silicon hardware. It could also be the perfect hiding place for
 real-world backdoors, embedded directly in the CPU, easy for vendors to
-update, and capable of supporting sophisticated malicious functionality[101].  
+update, and capable of supporting sophisticated malicious functionality[20].  
 
 The microcode format is not publicly documented and it is embedded in the
 CPU's internal memory, with updates only available in encrypted packages.
 However, AMD has a patent detailing their microcode implementation called
-RISC86[102], used in the AMD-K6 processor. In my opinion, this is the most
+RISC86[21], used in the AMD-K6 processor. In my opinion, this is the most
 detailed public document on the subject from a major CPU vendor. I am also
 still learning, so I am not in a position to explain how microcode works.
 But for context, I will provide a brief overview of microcode as I
@@ -1326,7 +1326,7 @@ since the Intel Pentium Pro and AMD K6 processors. These CPUs employ
 multiple advanced instruction decoders to break down complex x86 CISC
 instructions into simpler RISC-style microcode for execution.
 
-Quote from an old AMD document[104]: "The AMD-K6 processor uses a combination
+Quote from an old AMD document[22]: "The AMD-K6 processor uses a combination
 of decoders to convert x86 instructions into RISC86 operations. The
 hardware includes four decoders: 
 
@@ -1354,13 +1354,13 @@ Pioneering work by Ermolov, Sklyarov, and Goryachy has achieved critical
 breakthroughs in this domain through their research on Intel's Goldmont
 microarchitecture. Their research uncovered a critical vulnerability in TXE
 firmware that permits arbitrary code execution and achieves privileged "red
-unlock" status[105][106], effectively bypassing conventional microcode security
+unlock" status[23][24], effectively bypassing conventional microcode security
 protections.
 
 Furthermore, their discovery of previously undocumented UDBGRD/UDBGWR
-instructions[112][108] provides direct access to the internal CRBUS (Control
+instructions[30][26] provides direct access to the internal CRBUS (Control
 Register Bus), enabling unprecedented low-level processor control.
-Complementing these findings, the uCodeDisasm project[107] has made
+Complementing these findings, the uCodeDisasm project[25] has made
 substantial progress in decoding microcode semantics and identifying
 numerous undocumented microarchitectural features and control registers.
 All these efforts together have opened new avenues for deeper analysis of
@@ -1373,7 +1373,7 @@ Identifying the microcode entry point for the CMPS instruction is
 relatively straightforward due to its characteristic usage of architectural
 registers. The instruction employs RCX as its loop counter while utilizing
 RSI and RDI as string pointers. So, simply look for microcode associated
-with RCX, RDI, and RSI and fits the three rules[107] for microcode entries.
+with RCX, RDI, and RSI and fits the three rules[25] for microcode entries.
 
 1. The address for any x86 entry point is in the range U0000-U1000
 2. The address for x86 instruction entry must be a multiple of 8 
@@ -1433,7 +1433,7 @@ microcode addresses, or termination of the current routine.
 Below are the micro-instruction and sequence word formats. As I am still
 studying their meanings, I will not provide a detailed explanation of each
 field here. For comprehensive information, please refer to the foundational
-documentation in uCodeDisasm[107] and lib-micro[109]. 
+documentation in uCodeDisasm[25] and lib-micro[27]. 
 
 
  4746 45 44 43         32 31    24 23 22 18 17   12 11    6 5     0
@@ -1552,7 +1552,7 @@ password '123') for this experiment. To use less MSRAM space, the
 implementation compares only on the first 64 bits of the hash value, which
 is 0xa79016d797e6bd3d.
 
-The following microcode utilizes lib-micro[109] for writing to MSRAM and the
+The following microcode utilizes lib-micro[27] for writing to MSRAM and the
 Match/Patch registers. Its IN instruction microcode patch is essential for
 sustaining persistent microcode hooks. The forked version of lib-micro
 includes the CMPS backdoor implementation. Full source code is accessible
@@ -1664,7 +1664,7 @@ system boot.
 When Mark Ermolov, Dmitry Sklyarov, and Maxim Goryachy achieved the "Red
 Unlock" on an Intel Goldmont microarchitecture CPU, they used a Gigabyte
 NUC (model GB-BPCE-3350C) as their test machine. Later, KaKaRoTo continued
-this work on a Beelink-M1 NUC[110]. Subsequently, Alexander Krog and
+this work on a Beelink-M1 NUC[28]. Subsequently, Alexander Krog and
 Alexander Skovsende released the lib-micro project, rewriting the exploit
 for their own machine, which I believe was an UP Squared Pro N4200.
 
@@ -1872,13 +1872,13 @@ documented in public specifications, these internal buses appear to exist
 across major architectures, such as Intel CRBUS (Configuration Register
 Bus) and IBM PIB (Pervasive Interconnect Bus).
 
-The CRBUS can be accessed through multiple interfaces[113]. One method is
+The CRBUS can be accessed through multiple interfaces[31]. One method is
 via the TAP (Test Access Port) which is a logic block responsible for
 executing tests and managing data flow along the boundary cells. In
 practice, this is commonly referred to as JTAG access.
 
 The following CRBUS read/write implementation is extracted from the TXE-POC
-project [105]:
+project [23]:
 
  def crbus_read(addr):
      glm0 = ipc.devs.glm_module0
@@ -1931,7 +1931,7 @@ JTAG interface.
 The second parameter specifies the instruction to be scanned into the
 device. While the exact meaning of the "0xa8" used in the Python code above
 seems to be undocumented, it may correspond to "CRBUS" instruction as
-referenced in a Intel patent[113]."
+referenced in a Intel patent[31]."
 
 Accroding to the patent, the CRBUS consists of one 32-bit CR DATA BUS and
 10-bit CR ADDRESS & W/R BUS. Two different TAP instructions, "CRBUS" and
@@ -2002,15 +2002,15 @@ For CRBUS read or write operations, the RAX register holds the address of
 the target control register.
 
 For MSROM reads or MSRAM writes, the relevant control registers belong to
-LDAT (Large Data Array Testing[111] or Local Direct Access Test[112]). As the
+LDAT (Large Data Array Testing[29] or Local Direct Access Test[30]). As the
 name suggests, the LDAT engine manages large data arrays. 
 
-The engine has four registers: SDAT, PDAT, DATIN, and DATOUT[111][114]. By
+The engine has four registers: SDAT, PDAT, DATIN, and DATOUT[29][32]. By
 configuring SDAT/PDAT with address, array, bank, and other parameters,
 specific memory arrays can be read or written. It is unclear to me how this
 was reverse-engineered, whether through direct analysis or by referencing
 some XML files containing register address definitions. Previous
-research[112][114][109][115] provides these definitions, which I include here for
+research[30][32][27][33] provides these definitions, which I include here for
 easy reference.
 
 
@@ -2406,29 +2406,29 @@ with me, even when I'm not at my best. Love you guys!
 [17] https://sourceware.org/glibc/wiki/GNU_IFUNC
 [18] Designing and implementing malicious hardware
 [19] https://openpower.foundation/specifications/isa/
-[101] Alexander Krog and Alexander Skovsende. Backdoor in the Core - Altering
+[20] Alexander Krog and Alexander Skovsende. Backdoor in the Core - Altering
     the Intel x86 Instruction Set at Runtime. Defcon 31, 2023 
-[102] RISC86 INSTRUCTION SET. US Patent US5926642, 1999
-[104] AMD-K6 Processor Technical Brief
+[21] RISC86 INSTRUCTION SET. US Patent US5926642, 1999
+[22] AMD-K6 Processor Technical Brief
     https://www.ardent-tool.com/CPU/docs/AMD/K6/k6_techb.pdf
-[105] IntelTXE-PoC. https://github.com/ptresearch/IntelTXE-PoC
-[106] https://www.intel.com/content/www/us/en/security-center/advisory/
+[23] IntelTXE-PoC. https://github.com/ptresearch/IntelTXE-PoC
+[24] https://www.intel.com/content/www/us/en/security-center/advisory/
     intel-sa-00086.html
-[107] uCodeDisam. https://github.com/chip-red-pill/uCodeDisasm
-[108] udbgInstr https://github.com/chip-red-pill/udbgInstr
-[109] lib-micro. https://libmicro.dev
-[110] https://kakaroto.ca/2019/11/exploiting-intels-management-engine-part-1
+[25] uCodeDisam. https://github.com/chip-red-pill/uCodeDisasm
+[26] udbgInstr https://github.com/chip-red-pill/udbgInstr
+[27] lib-micro. https://libmicro.dev
+[28] https://kakaroto.ca/2019/11/exploiting-intels-management-engine-part-1
      -understanding-pts-txe-poc/
-[111] EFFICIENT RANGE - BASED MEMORY WRITEBACK TO IMPROVE HOST TO DEVICE
+[29] EFFICIENT RANGE - BASED MEMORY WRITEBACK TO IMPROVE HOST TO DEVICE
      COMMUNICATION FOR OPTIMAL POWER AND PERFORMANCE. US Patent 
      US 10,552,153 B2. 2020
-[112] Ermolov, M., Sklyarov, D. & Goryachy, M. Undocumented x86 instructions
+[30] Ermolov, M., Sklyarov, D. & Goryachy, M. Undocumented x86 instructions
      to control the CPU at the microarchitecture level in modern Intel
      processors. J Comput Virol Hack Tech 19. 2023
-[113] CONTROL REGISTER BUS ACCESS THROUGH A STANDARDIZED TEST ACCESS PORT.
+[31] CONTROL REGISTER BUS ACCESS THROUGH A STANDARDIZED TEST ACCESS PORT.
      US Patent US006055656A. 2000
-[114] Intel LDAT notes. https://pbx.sh/ldat/
-[115] crbus_scripts. https://github.com/chip-red-pill/crbus_scripts
+[32] Intel LDAT notes. https://pbx.sh/ldat/
+[33] crbus_scripts. https://github.com/chip-red-pill/crbus_scripts
 
 
 --[ 8. Appendix: Code
