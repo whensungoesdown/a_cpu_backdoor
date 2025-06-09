@@ -13,7 +13,7 @@
     2.3 Candidate Backdoor Instructions
 3. A New CPU Backdoor Design
     3.1 OS Authentication Bypass via Backdoored Instruction 
-    3.2 X86 QEMU TCG-based Prototype
+    3.2 x86 QEMU TCG-based Prototype
     3.3 SPARC64 Backdoor Prototype on OpenSPARC T1 FPGA
     3.4 Intel Goldmont x86 Microcode-Based Backdoor Implementation
          3.4.1 Microcode Basics
@@ -430,7 +430,7 @@ followed by a comparison. In actual x86 CPUs, it is decoded into microcode,
 with a single microinstruction dedicated to the comparison process.
 
 
-----[ 3.2 X86 QEMU TCG-based Prototype
+----[ 3.2 x86 QEMU TCG-based Prototype
 
 I really wish I could put this backdoor on a real x86 CPU. But I can't find
 an open-source x86 CPU capable of running the Windows system (NT kernel)
