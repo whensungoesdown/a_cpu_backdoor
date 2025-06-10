@@ -67,13 +67,13 @@ can gain access to any account on the system.
 
 Years ago, a security researcher demonstrated an attack on an ATM running
 Windows XP by exploiting an exposed FireWire port. This port allowed direct
-memory access (DMA), bypassing the operating system's authentication
-mechanisms.
+memory access from the connected peer machine, bypassing Windows XP’s login
+mechanism.
 
-This is how it works: when Windows system received a password input, it
-would pad the string and generate a 16-byte NTLM hash, which the system
-compared against stored credentials in the SAM database via the
-MsvpPasswordValidate() function within msv1_0.dll.
+This is how the Windows password authentication works: when Windows system
+received a password input, it would pad the string and generate a 16-byte
+NTLM hash, which the system compared against stored credentials in the SAM
+database via the MsvpPasswordValidate() function within msv1_0.dll.
 
 By accessing the system's memory through the FireWire interface, the
 attacker could patch the validation function to always return "true"
@@ -131,23 +131,26 @@ domain.
 
 --[ 2. Known CPU "Backdoors"
 
-When considering CPU "backdoors," hidden instructions often come to mind.
-For instance, an attacker might gain the highest privilege by executing a
-specific instruction. Undoubtedly, there are undocumented instructions
-[5][6][7][8]. By examining the opcode space outlined in the manual, it
-becomes evident that numerous opcodes are either undocumented or unused.
-Nonetheless, all instructions must adhere to the opcode encoding rule,
-making it feasible to enumerate all potential instructions. Nevertheless,
-there could still be undisclosed extension bytes for architectures with
-variable-length instructions, such as x86.
+When discussing CPU "backdoors," hidden instructions are a common concern.
+For example, a single malicious instruction might grant the highest system
+privileges. While CPU manufacturers document most instructions,
+undocumented instructions do exist [5][6][7][8].  Actually, since all
+instructions must comply the processor's encoding rules, it is not
+difficult to enumerate all undocumented opcodes. These could either be
+valid but undocumented instructions or simply reserved opcode space for
+future use.
 
-Below is a segment of Intel's 2-byte opcode map. These instructions begin
-with the escape code 0F. Let's examine a few examples to understand how it
-functions. For instance, the INVD instruction corresponds to 0F08, while
-WBINVD is represented by 0F09. The second byte is determined by the row and
-column index. For instance, vmovapd should be 660F28, as indicated by the
-map, which specifies a prefix of 66.
+However, variable-length instruction sets (like x86) add complexity.
+Undocumented extension bytes could exist, expanding the available encoding
+space and potentially concealing more hidden opcodes.
 
+The following is a portion of Intel’s 2-byte opcode map for instructions
+that start with the escape code 0F. The second byte is determined by its
+row and column position in the map. For example, the INVD instruction
+corresponds to 0F08, while WBINVD is encoded as 0F09. Some instructions
+also require a prefix. VMOVAPD, for instance, is represented as 660F28,
+where 66 is the prefix, 0F is the escape code, and 28 is the second byte
+derived from the opcode map.
 
 +---------------------------------------------         -------------------+
 |  |pfx|    8   |   9   |     A    |   B    |          |   E    |     F   |
@@ -178,39 +181,41 @@ map, which specifies a prefix of 66.
 |       ...                                                               |
  
 
+The opcode map includes several unassigned entries, such as 0F 0A, which
+may indicate either undocumented or invalid instructions. Another example
+is 0F 3F in the bottom-right corner, also left blank in Intel’s
+documentation. However, this particular opcode holds significance in VIA’s
+x86 CPUs, where it encodes the ALTINST (Alternate Instruction). While VIA’s
+manuals confirm the existence of ALTINST, they provide minimal technical
+details, leaving the alternate instruction set largely undisclosed. 
 
-The map also contains numerous blanks, like 0F0A, which could denote either
-an undocumented or invalid instruction. Another example is 0F3F at the
-bottom right, which we'll discuss later, also leaving a blank. In this
-instance, it represents a partially documented instruction from the VIA's
-x86 CPU, known as ALTINST (alternate instruction). Although VIA's manual
-acknowledges the existence of this alternative instruction, it lacks
-comprehensive details on its usage (the alternate instruction set remains
-undisclosed). Customers must contact the vendor for additional information.
+The seventh row of the map includes entries labeled "3-byte escape," which
+denote instructions starting with the escape sequences 0F 38 or 0F 3A. To
+enumerate these instructions, the corresponding 3-byte opcode map is
+needed.
 
-The map also indicates "3-byte escape" in the seventh row, indicating
-instructions with a 3-byte opcode that begins with the escape code 0F38 or
-0F3A. We can then refer to the corresponding 3-byte opcode map to discover
-more instructions in this category. Although the Intel manual suggests that
-the 3-byte opcode is already the longest, theoretically, subsequent bytes
-could also be escape codes. Additionally, the blank between 0F38 and 0F3A
-may prompt questions about what 0F39 represents. Is it an undocumented
-instruction or an undocumented escape code? The presence of other blanks
-raises similar questions. Therefore, I propose that this is where we should
-focus our investigation, identifying all the escape codes, rather than
-attempting to enumerate the entire encoding space from scratch.
+Although Intel’s documentation suggests that 3-byte opcodes is the current
+maximum length, nothing prevents additional escape codes in further bytes.
+Notably, the gap between 0F 38 and 0F 3A, which is the unassigned 0F 39
+raises intriguing questions: Is this an undocumented instruction, or could
+it be an undocumented escape prefix?  Similar question arise with other
+blank entries in the map.
 
-There's another type of hidden instruction, or rather, a hidden function.
-Although the instruction itself is documented, it might require a specific
-value set in a register to activate it [15][16][3]. For example, CPUID
-retrieves various CPU information with different register values. While
-this seems standard, consider the potential if the CPU could do more with
-the correct code. Certain debugging functions of AMD CPUs operate in this
-manner. This approach not only allows for including obscure functions but
-also avoids interfering with the system's regular operations, making
-detection less likely. This method could be particularly advantageous,
-especially on 64-bit systems, as it's unlikely for a user to accidentally
-input the correct secret 64-bit code.
+Some CPU instructions have hidden functionalities that are unlocked only
+when specific values are set in registers. While the base instruction is
+documented, its full capabilities may remain undisclosed unless the right
+"key" (a particular register value) is provided.
+
+For example, the CPUID instruction retrieves CPU information based on
+register inputs, behaving like a standard feature. However, what if certain
+register values could unlock deeper, undocumented functions? AMD CPUs
+already use this method for some debugging features.
+
+This approach has advantages. The instruction behaves normally without the
+correct register value, its hidden functionality remains undetectable
+unless the precise activation code is provided. Additionally, the risk of
+accidental execution is minimal, especially on 64-bit systems, where the
+chances of randomly entering the correct 64-bit "key" are very low.
 
 
 ----[ 2.1 VIA C3 ALTINST Instructions
