@@ -34,90 +34,99 @@
 
 --[ 1. Introduction
 
-The whole CPU backdoor thing is pretty wild. People are always wondering if
-they're real or not. It's hard to believe big tech giants like IBM, Intel,
-and AMD never even thought about putting them in. Backdoors, especially CPU
-ones, should be like super stealthy Kungfu moves, saved for breaking into
-the most fortified systems as a last resort. It reminds me of that scene in
-Swordfish where Stanley's hacking into the DoD's system. He's already
-planted a trojan horse, and after some drama, he finally gains access.
+The concept of CPU backdoors are both fascinating and controversial. While
+their existence is often debated, it’s hard to believe that the major CPU
+vendors (like Intel, AMD, ARM and IBM) or certain agencies have never
+considered them. An effective CPU backdoor must be undetectable and and
+lethal, reserved only for breaching the most secure systems as a last
+resort. 
 
-When discussing CPU backdoors, hidden instructions often immediately come
-to mind. However, to activate them, attackers typically require the
-capability to execute code within the system. But how do they gain access
-to the system in the first place?  Now, consider if the CPU had a hardware
-backdoor itself. Any system utilizing such a CPU could potentially enable
-the attacker to log in, regardless of any prior interaction with the
-system.
+Current discussions often focus on undocumented instructions. Problem is,
+those still require the attacker to already have some foothold in the
+system. Instead, what if a backdoor embedded deep within the processor’s
+microarchitecture, could grant access to a system without requiring any
+prior compromise? 
 
-Components such as BMC (Baseboard Management Controller) and Intel AMT
-(Active Management Technology), along with their chip controlling buses,
-undoubtedly have the capability to impose full control over the system at
-the deepest level. However, these features are generally documented to some
-extent and are often considered part of the broader umbrella term RAS
-(Reliability, Availability, and Serviceability). Customers should already
-be fully aware of the risks when their devices are advertised as
-conveniently manageable.
+Certainly, components like the Baseboard Management Controller (BMC) and
+Intel’s Management Engine (ME), along with their underlying controlling
+bus, can fully control a system at the deepest level. However, these
+features are at least partially documented and typically fall under the
+broader category of Reliability, Availability, and Serviceability (RAS).
+Customers should already be well aware of the risks when their devices are
+marketed as remotely manageable.
 
-Our objective is to embed a CPU backdoor within instruction implementations
-at the microarchitecture level.  We are not try to make a
-halt-and-catch-fire instruction. Rather, we aim for the CPU backdoor to
-assist us at crucial moments, such as logging into the system. However,
-during the execution of instructions by the CPU core, the high-level OS
-context is lost. Nevertheless, it's noteworthy that the operating system
-authentication module has seen little change over the years.  This may be a
-deliberate arrangement or simply due to the maturity of the code.
+The goal of this project is to implant a CPU backdoor by altering
+instruction implementations. It is not meant to make a destructive
+"halt-and-catch-fire" instruction. This backdoor is designed to subtly
+manipulate critical instructions such as "CMP" that involved in password
+authentication, to bypass system security checks. 
 
-Years ago, a hacking technique surfaced involving an ATM equipped with a
-Windows XP system. A hacker discovered that the ATM had an exposed firewire
-port. To bypass the Windows XP password authentication, the hacker utilized
-the firewire port to access the computer's memory and modify the code
-responsible for verifying input passwords. This alteration enabled the
-hacker to log into the ATM using any password. The specific code that
-needed patching was within the Windows logon process, which pads the input
-password and generates a 16-byte hash using the NTLM proprietary hashing
-algorithm. The msv1_0.dll module in Windows XP contains the
-MsvpPasswordValidate() function, which compares the generated hash with the
-one stored in the SAM (Security Accounts Manager) database. By patching
-this function to always return true, even with an incorrect password, the
-hacker could achieve unauthorized access. Additionally, a predefined
-password hash could be encoded within the function, allowing a secret
-password to log in to any user account in the system.
+Imagine an attacker sitting down at a secured machine he’ve never touched
+before, or connecting remotely. By entering one secret master password, he
+can gain access to any account on the system. 
 
-Even more intriguingly, the hash used is unsalted. Surprisingly, even
-Windows 10 continues to employ unsalted hashes (I haven't had a chance to
-test Windows 11 yet, so let's hope nothing has changed). Introducing a CPU
-password backdoor would be particularly convenient due to the
-predictability of an unsalted hash. Within the CPU's ALU (Arithmetic Logic
-Unit) module, malicious circuitry lies in wait for a predetermined hash
-value. When this hash is compared with the correct one stored in the
-system, the ALU alters the result of the CMP instruction to falsely
-indicate that the hash is correct. This deception allows the user to log in
-with the predefined secret password.
+Years ago, a security researcher demonstrated an attack on an ATM running
+Windows XP by exploiting an exposed FireWire port. This port allowed direct
+memory access (DMA), bypassing the operating system's authentication
+mechanisms.
 
-To demonstrate the feasibility of implementing this backdoor on a
-commercial CPU, I chose to implement it on OpenSPARC T1, which is the
-open-source variant of the Sun Microsystems UltraSPARC T1. OpenSPARC offers
-a Xilinx EDK (Embedded Development Kit) project, enabling the T1 system to
-run on a Xilinx ML505-V5LX110T FPGA board. This setup allowed me to test
-the backdoor on an actual CPU to the extent possible. However, Windows
-cannot operate on a SPARC machine. Therefore, I pursued two separate
-projects. Firstly, I utilized QEMU with TCG (Tiny Code Generator) to
-showcase the backdoor on a virtual X86 machine running the Windows system.
-Additionally, I implemented the backdoor in Verilog code on the OpenSPARC
-T1 and tested it with a Linux system.
+This is how it works: when Windows system received a password input, it
+would pad the string and generate a 16-byte NTLM hash, which the system
+compared against stored credentials in the SAM database via the
+MsvpPasswordValidate() function within msv1_0.dll.
 
-In Linux and other *nix systems, the adoption of salted hashes complicates
-the implementation of the backdoor. Nonetheless, it remains feasible. Due
-to the salt, the CPU cannot identify predefined hash values. However, the
-username can still be transmitted as clear text to the CPU before
-authentication. The operating system also plays a crucial role,
-particularly by maintaining critical code unchanged for decades.
+By accessing the system's memory through the FireWire interface, the
+attacker could patch the validation function to always return "true"
+(rendering all passwords valid) or embed a predetermined hash to accept a
+specific master password. This memory-level manipulation completely
+circumvented Windows XP's security measures, granting unrestricted access
+to any system account.
 
-The paper is structured into three main sections. Firstly, we investigate
-background information on existing CPU "backdoors." Then, we demonstrate
-our new CPU backdoor. Finally, we discuss potential directions for future
-research.
+Surprisingly, the hash used is unsalted. Even Windows 10 still relies on
+unsalted hashes (I haven't tested Windows 11 yet, as none of my machines or
+VMs meet its requirements, but I suspect the situation remains unchanged).
+A CPU password backdoor would be especially convenient due to the
+predictability of unsalted hashing.
+
+One challenge for hardware-level backdoors is that CPU cores operate at a
+lower abstraction layer, stripping away OS-level context during instruction
+execution. However, it is notable that operating system authentication
+module has remained largely unchanged for years (all NT-based Windows
+system use the same autentication mechanism and libaries as just descibed
+above, at least from Windows XP to Windows 10), whether by deliberate
+design or simply due to the robustness of their implementation.
+
+For the backdoor design, malicious circuitry is embedded into the CPU's
+Arithmetic Logic Unit(ALU). When a specific hash value is compared, the
+malicious circuitry manipulates the ALU to produce a false result, forcing
+it to return a match regardless of the actual comparison. This manipulation
+is triggered when the ALU operation originates from a CMP instruction
+executed by the password authentication module. (64-bit hashes derived from
+the secret master key prevent false triggers.) As a result, the master key
+will be accepted as valid for any stored credentials, bypassing
+authentication checks.
+
+To validate this concept, I employed QEMU with TCG (Tiny Code Generator) to
+demonstrate the backdoor on a virtual x86 machine running Windows.
+
+To further verify the backdoor’s feasibility on commercial hardware, I
+implemented it in Verilog RTL for the OpenSPARC T1(Sun Microsystems’
+open-source UltraSPARC T1 variant) and deployed it on a Xilinx ML505
+(Virtex-5 LX110T) FPGA board. This FPGA implementation enabled
+cycle-accurate verification of the backdoor on actual CPU hardware.
+
+Since Windows does not support SPARC-based systems, I installed a Linux
+distribution instead and made adjustments to the backdoor. In Linux and
+other Unix-like systems, the use of salted password hashes complicates
+backdoor implementation. Since the salt prevents the CPU from directly
+recognizing predefined hash values, but the username transmitted in
+cleartext can still serve as an alternative trigger. 
+ 
+This paper is structured in three main sections. We begin by discussing
+existing CPU backdoors to establish necessary background knowledge. Next,
+we introduce and demonstrate our novel CPU backdoor design. Finally, we
+conclude by discussing promising directions for future research in this
+domain.
 
 
 --[ 2. Known CPU "Backdoors"
