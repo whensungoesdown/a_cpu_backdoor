@@ -220,44 +220,35 @@ chances of randomly entering the correct 64-bit "key" are very low.
 
 ----[ 2.1 VIA C3 ALTINST Instructions
 
-The VIA C3 processor includes an instruction called ALTINST[9], encoded as
-0F 3F. This instruction is detailed in the C3 manual and acts as the
-gateway to an alternate instruction set. However, this alternate set is not
-documented and is believed to consist of RISC-like microcodes that operate
-internally within the CPU. The C3 manual says: "This alternate instruction
-set is intended for testing, debug, and special application usage.
-Accordingly, it is not documented for general usage. If you have a
-justified need for access to these instructions, contact your VIA
-representative." 
+The VIA C3 processor has a unique instruction called ALTINST[9] (encoded as
+0F 3F), which serves as an entry point to an undocumented alternate
+instruction set. While the C3 technical manual acknowledges the existence
+of this instruction set, it provides no further details. The manual
+says:"This alternate instruction set is intended for testing, debugging,
+and specialized applications. As such, it is not documented for general
+use. If access to these instructions is required, contact your VIA
+representative." However, research[10] and patents[11][12][13][14] suggests
+that the VIA C3's ALTINST opcode unlocks an undocumented RISC-like
+microcode ISA that bypasses x86 privilege enforcement, allowing ring 3 code
+to execute ring 0 operations and circumvent memory protection checks.
 
-This alternate instruction set includes an expanded array of integer, MMX,
-floating-point, and 3DNow! instructions, along with additional registers.
-Within this alternate instruction set, privileged functions can be accessed
-from any protection level, memory descriptor checks can be bypassed, and
-various x86 exceptions like alignment checks can be avoided. 
+To enable the alternate instruction set, the ALTINST bit must first be set
+to 1 in the Feature Control Register (FCR) via WRMSR. If disabled
+(ALTINST=0), executing the 0F 3F opcode triggers an Invalid Instruction
+(#UD) exception. Once enabled, executing 0F 3F performs a near branch to
+CS:EAX while simultaneously switching the processor into an internal mode,
+interpreting subsequent instructions as the microcode and bypassing
+standard privilege checks.
 
-To utilize these instructions, the ALTINST bit must be set to 1 in the
-FEATURE CONTROL REGISTER (FCR) MSR using the WRMSR instruction. If ALTINST
-is set to 0, executing 0F3F will result in an Invalid Instruction
-exception. Once the ALTINST bit is set, the 0F3F instruction can be
-executed from any privilege level, causing a near branch to CS:EAX.
-Additionally, besides the branch, the 0F3F instruction places the processor
-into an internal mode where the target bytes are interpreted not as x86
-instructions but as instructions from the alternate instruction set.
-
-The alternate instructions fetched following the 0x0F3F branch should be in
-the form of 0x8D8400XXXXXXXX, where XXXXXXXX represents the 32-bit
-alternate instruction. This is presented as the 32-bit displacement of an
-LEA [EAX+EAX+disp]. Upon fetching, the LEA "wrapper" is removed, and the
-32-bit alternate instruction is executed. This arrangment is clever because
-if the disassembler interprets 0F3F as a NOP, then all subsequent x86
-instructions seem genuine.
-
-This topic has been discussed [10]. Moreover, patents related to VIA
-processor microarchitecture [11][12][13][14] suggest that the alternate
-instruction set likely consists of internal microinstructions. However, an
-in-depth investigation into this alternate instruction set is not the focus
-of this paper.
+After executing the 0x0F3F gateway instruction, the processor expects
+alternate instructions to be encoded within an LEA [EAX+EAX+disp32] opcode
+sequence (0x8D8400XXXXXXXX), where the 32-bit displacement field (XXXXXXXX)
+contains the actual micro-operation. The CPU internally extracts and
+executes this payload while discarding the x86 LEA wrapper. This encoding
+scheme is clever, bacause disassemblers typically interpret 0x0F3F as a NOP
+instruction. The following bytes are then processed as a standard x86 LEA
+operation, effectively concealing the alternate instruction stream within
+what appears to be normal x86 code.
 
 
 ----[ 2.2 AMD Secret Password 0x9C5A203A
@@ -2384,23 +2375,23 @@ with me, even when I'm not at my best. Love you guys!
 
 --[ 7. References
 
-[1] https://wiki.qemu.org/Documentation/TCG/frontend-ops
-[2] SPARC Assembly Language Reference Manual
-    https://docs.oracle.com/cd/E36784_01/pdf/E36858.pdf
-[3] CPU bugs, CPU backdoors and consequences on security
-[4] Live Migration with AMD-V Extended Migration Technology
-    http://developer.amd.com/wordpress/media/2013/02/
-    livevirtualmachinemigrationonamdprocessors.pdf
-[5] A Performance Evaluation of Platform-Independent Methods to Search for
-    Hidden Instructions on RISC Processors.  
-[6] Breaking the x86 ISA. BlackHat, USA, 2017.
-[7] Uisfuzz: An efficient fuzzing method for CPU undocumented instruction
-    searching. 
-[8] Uncovering Hidden Instructions in Armv8-A Implementations. 
-[9] VIA C3 Nehemiah Datasheet, 2004.
-    http://datasheets.chipdb.org/VIA/Samuel2/VIA%20C3%20Samuel%202%20
-    Datasheet%20V1.12.pdf
-[10] Hardware backdoors in x86 CPUs. Black Hat, 2018.
+ [1] https://wiki.qemu.org/Documentation/TCG/frontend-ops
+ [2] SPARC Assembly Language Reference Manual
+     https://docs.oracle.com/cd/E36784_01/pdf/E36858.pdf
+ [3] CPU bugs, CPU backdoors and consequences on security
+ [4] Live Migration with AMD-V Extended Migration Technology
+     http://developer.amd.com/wordpress/media/2013/02/
+     livevirtualmachinemigrationonamdprocessors.pdf
+ [5] A Performance Evaluation of Platform-Independent Methods to Search for
+     Hidden Instructions on RISC Processors.  
+ [6] Breaking the x86 ISA. BlackHat, USA, 2017.
+ [7] Uisfuzz: An efficient fuzzing method for CPU undocumented instruction
+     searching. 
+ [8] Uncovering Hidden Instructions in Armv8-A Implementations. 
+ [9] VIA C3 Nehemiah Datasheet, 2004.
+     http://datasheets.chipdb.org/VIA/Samuel2/VIA%20C3%20Samuel%202%20
+     Datasheet%20V1.12.pdf
+[10] Christopher Domas. Hardware backdoors in x86 CPUs. Black Hat, 2018.
 [11] Apparatus and method for limiting access to model specific registers
      in a microprocessor, December 25 2012. US Patent 8,341,419.
 [12] Microprocessor that performs X86 ISA and arm ISA machine language
