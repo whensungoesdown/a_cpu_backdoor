@@ -316,21 +316,23 @@ revealed in another whitepaper[34].
 
 ----[ 2.3 Candidate Backdoor Instructions
 
-Fully documented and benign, this instruction sparks a clever idea worth
-mentioning. It is the OR instruction in the IBM Power ISA[19].
+The OR instruction is part of the IBM Power ISA[19]. The basic operation is
+defined as:
 
 "or RA,RS,RB: The contents of register RS are ORed with the contents of
 register RB and the result is placed into register RA. Some forms of or
 Rx,Rx,Rx provide special functions; see Section 3.2 and Section 4.3.3, both
 in Book II."
 
-It is a typical OR instruction using registers. But when all three operands
-are the same register, essentially doing nothing, it triggers special
-functions like adjusting process priority levels and providing cache hints.
-For instance, "or 2, 2, 2" (using general register 2) sets the process
-priority to "medium," innocuous on the surface. Yet, consider the
-possibility of exploiting it to adjust current privileges—it could become a
-handy backdoor.
+This appears to be a normal OR instruction with register operands. However,
+when all three operands reference the same register (effectively performing
+a NOP), it activates hidden system functions, such as adjusting process
+priorities or issuing cache hints. For example, executing "or 2, 2, 2"
+(using general-purpose register 2) silently sets the process priority to
+"medium," appearing harmless while triggering background behavior.
+
+Imagine if this instruction had hidden functionality, like adjusting
+current privileges, then it could serve as a convenient backdoor.
 
 
 --[ 3. Designing a CPU Backdoor
