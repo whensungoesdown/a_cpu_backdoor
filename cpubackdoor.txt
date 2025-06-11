@@ -11,7 +11,7 @@
     2.1 VIA C3 ALTINST Instructions 
     2.2 AMD Secret Password 0x9C5A203A
     2.3 Candidate Backdoor Instructions
-3. A New CPU Backdoor Design
+3. Designing a CPU Backdoor	
     3.1 OS Authentication Bypass via Backdoored Instruction 
     3.2 x86 QEMU TCG-based Prototype
     3.3 SPARC64 Backdoor Prototype on OpenSPARC T1 FPGA
@@ -333,7 +333,7 @@ possibility of exploiting it to adjust current privileges—it could become a
 handy backdoor.
 
 
---[ 3. A New CPU Backdoor Design
+--[ 3. Designing a CPU Backdoor
 
 The known backdoors mentioned earlier, and proposed ideas[3][18] imply that
 the attacker must already have the ability to execute instructions within
