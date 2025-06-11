@@ -253,24 +253,26 @@ what appears to be normal x86 code.
 
 ----[ 2.2 AMD Secret Password 0x9C5A203A
 
-Model Specific Registers (MSRs) are various control registers in the x86
-instruction set used for tasks like debugging, program execution tracing,
-computer performance monitoring, and toggling certain CPU features.
-Accessing these registers involves using the RDMSR and WRMSR instructions,
-which read from and write to the registers, respectively, using a 32-bit
-integer as the MSR index. Some MSRs are undocumented, and what's even more
-intriguing is that certain undocumented MSRs require a password for access.
-For instance, the password 0x9C5A203A enables the hidden debugging function
-of AMD K8 processors. According to internet user Czernobyl, these
-undocumented MSRs are primarily used for debugging purposes. To enable the
-debugging capability, one needs to input the password 0x9C5A203A into the
-EDI register. Otherwise, a General Protection Fault (GPF) exception occurs.
+Model-Specific Registers (MSRs) are specialized control registers in the
+x86 architecture, designed for tasks such as debugging, execution tracing,
+performance monitoring, and enabling or disabling specific CPU features.
+Access to these registers is performed using the RDMSR and WRMSR
+instructions, which reference the target MSR via a 32-bit index.
 
-In an AMD white paper titled "Live Migration with AMD-V Extended Migration
-Technology,"[4] password-protected MSRs are mentioned. The following code
-sample illustrates how a hypervisor or operating system can suppress the
-reporting of the RDTSCP instruction on the Second-Generation AMD Opteron
-processor.
+Although most MSRs are documented, certain processors, particularly AMD’s
+Opteron (K8 microarchitecture), have undocumented MSRs that require
+password to access. For example, on those processors, the password
+0x9C5A203A unlocks hidden debugging functionality.  According to internet
+user Czernobyl[15], these undocumented MSRs are primarily used for
+low-level debugging. To activate this feature, the password must first be
+loaded into the EDI register. Failure to do so triggers a General
+Protection Fault (GPF) exception.
+
+An AMD white paper titled "Live Migration with AMD-V Extended Migration
+Technology"[4] references password-protected MSRs. The document includes a
+code example (shown below) demonstrating how a hypervisor or operating
+system can disable reporting of the RDTSCP instruction on Second-Generation
+AMD Opteron processors. 
 
 
 /*
@@ -305,10 +307,11 @@ processor.
                 WRMSR
 
 
-
-According to AMD's white paper, the password is only necessary for writing
-a specific bit in MSR c0011005h. Discovering such a hidden feature is quite
-challenging.
+According to the white paper, the password (0x9C5A203A) is only necessary
+for writing a specific bit in MSR c0011005h — a register that enables
+access to additional undocumented features. While the document mentions
+that the password must be obtained directly from AMD, it was accidentally
+revealed in another whitepaper[34].
 
 
 ----[ 2.3 Candidate Backdoor Instructions
@@ -2434,6 +2437,9 @@ with me, even when I'm not at my best. Love you guys!
      US Patent US006055656A. 2000
 [32] Intel LDAT notes. https://pbx.sh/ldat/
 [33] crbus_scripts. https://github.com/chip-red-pill/crbus_scripts
+[34] Live Migration With AMD-V Extended Migration Technology. 
+     https://kipdf.com/live-migration-with-amd-v-extended-migration-
+     technology_5acde91c7f8b9a7f9b8b45f1.html
 
 
 --[ 8. Appendix: Code
