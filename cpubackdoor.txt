@@ -12,9 +12,11 @@
     2.2 AMD Secret Password 0x9C5A203A
     2.3 Candidate Backdoor Instructions
 3. Designing a CPU Backdoor	
-    3.1 OS Authentication Bypass via Backdoored Instruction 
+    3.1 Windows Password Authentication Bypass via Backdoored Instruction 
     3.2 x86 QEMU TCG-based Prototype
     3.3 SPARC64 Backdoor Prototype on OpenSPARC T1 FPGA
+         3.3.1 *nix Password Authentication Analysis
+         3.3.2 Backdoor Implementation in RTL
     3.4 Intel Goldmont x86 Microcode-Based Backdoor Implementation
          3.4.1 Microcode Basics
          3.4.2 CMPS Microcode Analysis
@@ -347,7 +349,7 @@ even robust password authentication fails if the CPU itself is backdoored,
 enabling attackers to bypass verification silently.
 
 
-----[ 3.1 OS Authentication Bypass via Backdoored Instruction
+----[ 3.1 Windows Password Authentication Bypass via Backdoored Instruction
 
 Windows password authentication works as follows. During login, user
 password is padded and hashed to 16 bytes using NTLM algorithm. The
@@ -608,127 +610,142 @@ system, the password '123' can be used to access any user account.
 
 --[ 3.3 SPARC64 Backdoor Prototype on OpenSPARC T1 FPGA
 
-To demonstrate the feasibility of the backdoor on real CPUs, we developed a
-prototype on OpenSPARC T1. OpenSPARC T1 is the open-source counterpart of
-Sun Microsystems' UltraSPARC T1, known as code name Niagara. Featuring
-multithreading and multicore capabilities, the core has a single-issue,
-in-order, 6-stage pipeline design. The source code is accessible under the
-GNU General Public License v2. Xilinx's OpenSPARC Evaluation Platform
-(ML505-V5LX110T) is an FPGA board specifically designed to accommodate a
-complete OpenSPARC T1 system, encompassing the CPU, DDR memory controller,
-Ethernet, and more. Utilizing the source code, and the FPGA board, this
-setup represents the closest approximation to testing on a commercial CPU.
+To validate the backdoor’s feasibility on real hardware, we implemented a
+prototype on the OpenSPARC T1 processor. OpenSPARC T1 is the open-source
+version of Sun Microsystems’ UltraSPARC T1 (codenamed Niagara), featuring a
+single-issue, in-order, 6-stage pipeline with multicore and multithreading
+support. Its source code is publicly available under the GNU General Public
+License v2.
 
-The OpenSPARC project provides SunOS 5.11 and Ubuntu7.10 ramdisk images for
-use on the FPGA emulated system. Both systems have a 64-bit kernel, while
-user-mode programs are limited to 32 bits. According to the SPARC Assembly
-Language Reference Manual[2], specific 64-bit registers allow a 32-bit
-program to utilize their entire length. "The global registers and the
-output registers can be used to hold 64-bit integer values, but the input
-registers and the local registers can only be used to hold 32-bit values in
-the lower half of the register."
-
-Ubuntu7.10's 32-bit libc-2.6.1.so employs 64-bit registers in its strcmp()
-function. If memory addresses align, a CMP instruction with 64-bit register
-operands compares strings; otherwise, byte-by-byte comparison occurs. In
-the code snippet below, LDXA reads 64-bit data, and the CMP instruction
-compares two 64-bit operands, o2 and o3.
+For testing, we used Xilinx’s OpenSPARC Evaluation Platform
+(ML505-V5LX110T), an FPGA board designed to emulate a full OpenSPARC T1
+system, including the CPU, DDR memory controller, Ethernet interfaces, and
+other peripherals. This setup, leveraging the open-source RTL and
+FPGA-based emulation, provides the closest possible approximation to
+testing on a commercial CPU.
 
 
-                             LAB_0018d310         XREF[2]:     0018d328(j),
-        0018d310 90 02 20 08     add        __s1,0x8,__s1
-        0018d314 86 22 80 01     sub        o2,g1,g3
-        0018d318 80 a2 80 0b     cmp        o2,o3
-        0018d31c 12 60 00 29     bpne,pn    %xcc,LAB_0018d3c0
-        0018d320 d4 da 10 40     _ldxa      [__s1+g0] 0x82,o2
-        0018d324 80 88 c0 02     andcc      g3,g2,g0
-        0018d328 22 6f ff fa     bpe,a,pt   %xcc,LAB_0018d310
-        0018d32c d6 da 50 48     _ldxa      [__s2+__s1] 0x82,o3
+----[ 3.3.1 *nix Password Authentication Analysis
+
+The OpenSPARC project offers SunOS 5.11 and Ubuntu 7.10 ramdisk images for
+the FPGA-emulated system. Both operating systems run a 64-bit kernel but
+restrict user-mode programs to 32-bit execution. As noted in the SPARC
+Assembly Language Reference Manual [2], certain 64-bit registers remain
+accessible to 32-bit programs: "The global registers and output registers
+can store full 64-bit integer values, while the input and local registers
+are limited to 32-bit values in the lower half."
+
+In Ubuntu 7.10’s 32-bit libc-2.6.1.so, the strcmp() function leverages
+64-bit registers for string comparisons. When memory addresses are
+word-aligned, it uses the CMP instruction with 64-bit register operands to
+perform efficient comparisons. As illustrated in the following assembly
+snippet, LDXA loads 64-bit data into the registers (o2 and o3), which are
+then compared using CMP.
+
+                      LAB_0018d310         XREF[2]:     0018d328(j),
+ 0018d310 90 02 20 08     add        __s1,0x8,__s1
+ 0018d314 86 22 80 01     sub        o2,g1,g3
+ 0018d318 80 a2 80 0b     cmp        o2,o3
+ 0018d31c 12 60 00 29     bpne,pn    %xcc,LAB_0018d3c0
+ 0018d320 d4 da 10 40     _ldxa      [__s1+g0] 0x82,o2
+ 0018d324 80 88 c0 02     andcc      g3,g2,g0
+ 0018d328 22 6f ff fa     bpe,a,pt   %xcc,LAB_0018d310
+ 0018d32c d6 da 50 48     _ldxa      [__s2+__s1] 0x82,o3
 
 
-I also examined Debian 9.0, a 64-bit system on the SPARC64 platform, and
-found its libpam and libc are quite similar to their counterparts in Ubuntu
-7.10 SPARC32+. This suggests that, from the perspective of our CPU
-backdoor, this aspect has remained largely unchanged over the years.
-However, in Debian 9.0, strcmp() uses XOR instead of CMP for comparison.
-This minor alteration renders the backdoor ineffective if the backdoor is
-implemented solely on the CMP instruction. Perhaps CPU vendors could
-persuade compiler developers not to make such changes. Alternatively, if we
-could anticipate such changes, we could implement the backdoor using both
-instructions. After all, there are not many instructions that can be used
-to compare stuff.
+I also analyzed Debian 9.0 SPARC64 and found that its libpam and libc
+implementations closely resemble those in Ubuntu 7.10 SPARC32+. However, in
+Debian 9.0, strcmp() uses the XOR instruction for data comparison instead
+of CMP. This subtle change would make the backdoor ineffective if it
+exclusively targets on the CMP instruction. That said, this is only a minor
+issue for CPU vendors. They could either encourage compiler developers to
+favor a specific instruction or implement the backdoor for both cases.
+After all, only a few instructions are capable of performing data
+comparisons.
 
-In contrast to Ubuntu, SunOS 5.11's libc utilizes only 32-bit operands.
-Adjustments are necessary for this backdoor to be compatible with SunOS,
-yet, for simplicity, this paper focuses solely on the Ubuntu scenario.
+Unlike Ubuntu, SunOS 5.11's libc is limited to 32-bit operands. For
+simplicity, this analysis only focuses on Ubuntu.
 
-The authentication process relies on libpam (Pluggable Authentication
-Modules for Linux) to authenticate user-entered passwords, followed by a
-comparison of hash strings. Our backdoor specifically targets the CMP
-instruction. Ubuntu 7.10, similar to other Linux distributions, offers a
-variety of hash algorithms, such as MD5 and SHA256. Below is an example
-illustrating two hash strings, with the numeric value between the initial
-two $ symbols signifying the algorithm employed for generating each hash.
+In Ubuntu 7.10, user authentication is implemented through libpam
+(Pluggable Authentication Modules), which also verifies passwords by
+comparing hash strings. Our backdoor specifically exploits the CMP
+instruction in this verification process. 
 
+Like most Linux distributions, Ubuntu 7.10 supports multiple hash
+algorithms, such as MD5 and SHA256. The following example demonstrates two
+hash strings, where the numeric value between the first two dollar signs
+indicates the algorithm used for each hash. (MD5: $1$, SHA-256: $6$)
 
-"root:$1$7c71xB0y$mPkMSwwbMWgEXsyD6YV/C1:14168:0:99999:7:::"
+ "root:$1$7c71xB0y$mPkMSwwbMWgEXsyD6YV/C1:14168:0:99999:7:::"
 
-"u:$6$zE3nVD4laY6MS31E$NK4TnaebdS.O9FX9Q.pg7/yH.fH5bi8bHCFJdFbEaPtmW/59KKB7
-JDk53W21ZoLnKhrkmB4u5cXE.9ynmeIEw0:18811:0:99999:7:::"
+ "u:$6$zE3nVD4laY6MS31E$NK4TnaebdS.O9FX9Q.pg7/yH.fH5bi8bHCFJdFbEaPtmW/59KKB
+  7JDk53W21ZoLnKhrkmB4u5cXE.9ynmeIEw0:18811:0:99999:7:::"
 
 
-*nix systems introduce another challenge with the use of salt, as seen in
-the MD5 example. The hash begins with $1$, followed by the salt string
-ending with another $. The length of the salt string varies depending on
-the algorithm. The remaining portion represents the hash itself. The issue
-arises when the hash is salted, resulting in potentially millions of
-different hash strings for the same password. Consequently, after hashing,
-the CPU cannot discern the original password. Hence, during password
-authentication, the username serves as the sole method to convey a clear
-message to the CPU, especially crucial for network login scenarios.
+Additionally, *nix systems commonly use salt in password hashing to
+strengthen security. For example, an MD5 hash string follows the format
+$1$<salt>$<hash>, where $1$ indicates the hashing algorithm, <salt> is a
+random value, and <hash> is the resulting salted password hash.
 
-Our new approach leverages unique usernames to toggle the backdoor on or
-off. When enabled, the CPU bypasses any login authentication it encounters.
-For instance, "00000000" serves as the secret username to activate the CPU
-backdoor. As it is 8 bytes long, it fits into a 64-bit register. Initially,
-libpam checks this username against entries in the /etc/password file, with
-the first user typically being "root". Therefore, when comparing "00000000"
-with "root", the CPU interprets it as a "CMP reg-rs1 reg-rs2" instruction,
-where the rs1 register holds 0x726f6f7400000000 and the rs2 register
-contains 0x3030303030303030.
+Salting ensures that even one password produce millions of significantly
+different hashes, making precomputation attacks (like rainbow tables)
+infeasible, since storing every possible salted hash would be impractical.
 
-Upon encountering these two values, the CPU proceeds to inspect subsequent
-hash comparisons. Specifically, it seeks a pattern where both rs1 and rs2
-registers contain "$1$". This is because *nix systems compare the entire
-string, including the hash type and salt string.
+The CPU backdoor faces the same issue: it cannot compare against all salted
+hashes to identify one master password. However, during password
+authentication, the CPU can still read the username in cleartext.
 
-Here's how *nix password authentication operates. The crypt() function
-generates the hash value:
+Our approach uses unique usernames to enable or disable the backdoor. For
+instance, entering the secret username "00000000" will enable the backdoor.
+After that, the CMPS instruction will return a match for all subsequent
+hash string comparisons until the backdoor is disabled again. During this
+period, an attacker can log in to any account using any password.
 
+The secret username should be 8 bytes long, ensuring it fits precisely into
+a 64-bit register. During password authentication, libpam first verifies
+the username against entries in /etc/passwd, where the default first entry
+is usually "root". When comparing the input "00000000" with the stored
+"root" entry, the CPU executes a "CMP reg-rs1, reg-rs2" instruction. In
+this case, reg-rs1 holds 0x726f6f7400000000, which corresponds to the ASCII
+encoding of "root" followed by null padding to fill the 8-byte register.
+Meanwhile, reg-rs2 contains 0x3030303030303030, the ASCII representation of
+"00000000".
 
-char * crypt(const char *phrase, const char *setting);
+When these two values are compared, the CPU then examines subsequent hash
+comparisons. It specifically looks for a pattern where both the rs1 and rs2
+registers contain values beginning with "$1$". 
 
+Here is how *nix password authentication works. The crypt() function
+generates the hash value. libpam passes both the user-input password and
+the hash string stored in the /etc/shadow file to crypt(), as illustrated
+in the following code:
 
-libpam passes both the user input password and the hash string stored in
-the /etc/shadow file to crypt():
+ char * crypt(const char *phrase, const char *setting);
 
-
-pp = crypt("password_input", "$1$salt$hashxxxxx");
-
-
-The returned value is a pointer to the newly generated hash string, which
-is later compared to the stored hash string using strcmp():
-
-
-ret = strcmp(pp, stored_hash);
+ // stored_hash: e.g., "$1$7c71xB0y$mPkMSwwbMWgEXsyD6YVC1"
+ pp = crypt("password_input", stored_hash); 
 
 
-So, the strcmp() function is crucial. When the backdoor activates, for
-every CMP instruction comparing hash fragments, the CPU should yield a
-result indicating equality between the operands. Typically, a 0x00 within
-an operand signifies the end of the string being compared. However, this
-also hinges on the length of the entire string, which varies due to the
-hash function and salt size.
+The function returns a pointer to the newly generated hash string, which is
+then compared to the stored hash string using strcmp().
+
+ ret = strcmp(pp, stored_hash);
+
+
+The compared strings include both the hash type identifier and the salt
+string. This explains why the backdoor checks for values beginning with
+$1$, as previously mentioned.
+
+For each subsequent CMP instruction that compares fragments of the hash,
+the CMP instruction must produce a match until the final piece of the hash
+is processed. Normally, a null byte (0x00) marks the end of a string, but
+the actual length can vary depending on the hash function and salt size.
+
+For simplicity, this backdoor prototype is specifically designed to work
+with MD5 hashes.
+
+
+----[ 3.3.2 Backdoor Implementation in RTL
 
 Here's a brief overview of the OpenSPARC T1 core. It's a single-issue,
 in-order processor coded in Verilog. Unlike how a software emulator handles
