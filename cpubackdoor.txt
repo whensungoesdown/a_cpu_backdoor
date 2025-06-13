@@ -2223,59 +2223,67 @@ implmented through microcode.
 
 ----[ 4.2 Other Thoughts
 
-In a computer system, trust begins with the firmware. The CPU executes an
-initial code stored in ROM/OTPROM (One-Time Programmable ROM), which
-verifies subsequent firmware. This verification employs a digital signature
-mechanism, typically using an asynchronous encryption algorithm such as
-RSA. The next stage of firmware is signed with a private key, requiring the
-ROM code to use the corresponding public key for verification. This
-combination of ROM code and public key is widely recognized as the root of
+In a computer system, trust is rooted in the firmware. Upon startup, the
+CPU runs immutable code stored in ROM or OTPROM (One-Time Programmable
+ROM), which authenticates the next firmware stage through digital signature
+verification. This process typically relies on asymmetric cryptography,
+such as RSA. The subsequent firmware is signed with a private key, while
+the ROM contains the corresponding public key to validate its integrity.
+Together, this immutable ROM code and embedded public key form the root of
+trust for the system.
+
+In practice, the OTPROM has limited capacity. Consequently, instead of
+storing the entire public key, only its hash is kept in OTPROM, while the
+full public key resides in external storage (e.g., EEPROM or FLASH). Thus,
+the ROM code’s first step is to fetch the public key and verify its hash
+against the one stored in ROM. This comparison establishes the root of
 trust.
 
-The ROM, particularly OTPROM, has limited capacity. As a result, in
-practice, the hash of the public key is stored in OTPROM, while the public
-key itself is stored in writable storage like EEPROM or FLASH. Therefore,
-the ROM code's first task is to retrieve the public key and verify its hash
-against the one stored in ROM. Ultimately, the root of trust relies on
-comparing these two hash strings.
+After successfully authenticating the root public key, the system proceeds
+to validate the next stage firmware's digital signature. To understand how
+digital signatures work, let’s take RSA (specifically, the
+RSASSA-PKCS1-V1_5 scheme) as an example. Suppose we have the firmware bin,
+that needs to be verified, along with its digital signature, bin_sig. The
+verification process uses the signer’s public key to confirm that the
+signature is valid and the data has not been altered.
 
-Let's examine how digital signatures work, using RSA (RSASSA-PKCS1-V1_5) as
-an example.
-
-Assume "bin" is the entity to be verified and "bin_sig" is its digital
-signature. Here's the process for verifying a signature using the public
-key:
-
-
-1. Compute the SHA256 hash of "bin."
+1. Hash the input data: Compute the SHA-256 digest of the original data 
+   ("bin"): 
 
    hash = sha256(bin);
 
-2. Encode the hash value according to the widely used EMSA-PKCS1-v1_5
-   protocol, which doesn't involve using a salt.
+2. Encode the hash: Format the hash according to the EMSA-PKCS1-v1_5 
+   padding scheme (which does not use salt): 
 
    hash_encode = EMSA-PKCS1-v1_5(hash);
 
-3. Decrypt "bin_sig" with the public key using the RSA algorithm. This
-   yields an encoded hash. Encoding ensures the hash becomes a large number
-   suitable for the RSA algorithm.
+3. Decrypt the signature: Use the RSA public key to decrypt "bin_sig", 
+   get the encoded hash: 
 
    hash_encode_from_sig = rsa_decrypt(bin_sig, public_key);
 
-4. Compare the decoded hash from the signature with the encoded hash
-   derived from the original data.
+4. Compare the hashes: Verify the signature by checking if the decrypted 
+   encoded hash matches the locally computed encoded hash:    
 
    cmp(hash_encode_from_sig, hash_encode);
 
 
-Once more, the final comparison of hashes determines the result. 
+The final hash comparison decides whether verification passes or fails.
 
-In practice, it's not particularly useful for the CPU to remember only one
-or several hash strings. Consider if the hash function had a algorithmic
-backdoor, leaving secret patterns in the hash when the input's initial
-bytes contain a special "header." This pattern could be identified by the
-CPU during string comparison and allowed to pass. I am not sure if this is
-possible, but it's definitely a interesting idea to think about.
+So far, the system has performed two hash string comparisons. But what if
+the CPU recognizes even a single one of these hashes? This could break the
+trust chain, allowing the execution of malicious code.
+
+In practice, storing just a few hash strings in the CPU is not particularly
+useful because a single hash only represents one digital signature. Now,
+consider if the hash function had an algorithmic backdoor: one that
+produces detectable patterns when processing specially crafted inputs (such
+as those beginning with a particular header sequence). The CPU could detect
+this pattern during string comparison and let the malicious hash to pass
+authentication.
+
+I’m not certain whether this is feasible, but it’s certainly an interesting
+idea to explore.
 
 
 ----[ 4.3 Xilinx FPGA Toolchain Notes
