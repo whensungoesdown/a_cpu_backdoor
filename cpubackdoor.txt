@@ -2143,10 +2143,9 @@ hooks.
 
 ----[ 4.1 x86 SSE/AVX Instruction Set
 
-When disassembling the strcmp() function on an x86_64 Linux machine, it's
-revealed to be __strcmp_avx2(), an optimized version that utilizes the AVX2
-instruction set, as shown below.
-
+When examining the strcmp() function on Linux x86_64 systems, we find it
+uses __strcmp_avx2(), a version optimized with AVX2 instructions, as seen
+in the disassembly output below.
 
 (gdb) disassemble 
 Dump of assembler code for function __strcmp_avx2:
@@ -2168,16 +2167,15 @@ Dump of assembler code for function __strcmp_avx2:
 ...
 
 
-AVX (Advanced Vector Extensions) is an extension of the x86 instruction set
-designed for Intel and AMD microprocessors. It employs sixteen YMM
-registers to execute a single instruction on multiple pieces of data, known
-as SIMD (Single Instruction, Multiple Data) instructions.
+AVX (Advanced Vector Extensions) is a feature in modern Intel and AMD
+processors that speeds up computations by processing multiple data elements
+at once. It uses special 256-bit registers (YMM) to perform SIMD (Single
+Instruction, Multiple Data) operations, making tasks like multimedia
+processing and scientific calculations much faster.
 
-Functions like strcmp() can have multiple versions depending on which
-instruction extensions are supported by the system's CPU. Utilizing SIMD
-instruction sets can accelerate the strcmp() function. For instance, glibc
-provides various versions, including AVX2, as shown in the following code:
-
+In the GNU C Library (glibc), functions like strcmp() have multiple
+optimized variants, each designed to take advantage of specific CPU
+instruction sets, as illustrated in the code snippet below:
 
 /* Support sysdeps/x86_64/multiarch/strcmp.c.  */
 IFUNC_IMPL (i, name, strcmp,
@@ -2192,36 +2190,35 @@ IFUNC_IMPL (i, name, strcmp,
             IFUNC_IMPL_ADD (array, i, strcmp, 1, __strcmp_sse2))
 
 
-This mechanism is known as IFUNC (Indirect Function)[17]. It's a feature of
-the GNU toolchain that enables developers to create multiple
-implementations of a function and select among them at runtime using a
-resolver function. The dynamic loader calls the resolver function during
-early startup to determine which implementations will be used by the
-application. Once a choice is made, it remains fixed for the process's
-lifetime.
+This mechanism, called IFUNC (Indirect Function) [17], is a GNU toolchain
+feature that allows multiple function implementations to be selected at
+runtime via a resolver. The dynamic loader invokes this resolver during
+startup to choose the optimal version (e.g., AVX2), which then remains
+fixed for the process's lifetime.
 
-The concept of string comparison (byte or dword) using AVX2 involves
-comparing (VPCMPEQ) two ymm vectors. Since ymm registers are 256-bit, a
-single VPCMPEQ instruction can compare two 32-byte (VEC_SIZE) strings.
-Assuming avoiding page boundary issues, the following two instructions
-execute the comparison for 32 bytes:
-
+String comparison using AVX2 is performed through vectorized operations
+where two 256-bit ymm registers are compared using VPCMPEQ. As each ymm
+register holds 32 bytes (VEC_SIZE), this allows comparing 32-byte string
+chunks in a single operation. For example:
 
 vmovdqu (%rdi),%ymm1
 vpcmpeqb (%rsi),%ymm1,%ymm0
 
 
-The vmovdqu instruction retrieves 32 bytes from the memory address in the
-rdi register and loads them into the ymm1 register. Subsequently, vpcmpeqb,
-using rsi as the memory address, reads 32 bytes, compares them with the
-data in ymm1, and stores the result in ymm0. If two data elements are
-equal, the corresponding element in the destination operand is set to all
-1s; otherwise, it is set to all 0s.
+The vmovdqu instruction loads 32 bytes from the memory address in RDI into
+YMM1. The vpcmpeqb instruction then compares these 32 bytes against the
+contents at RSI's memory address, storing the comparison result in YMM0.
+Each byte position in YMM0 is set to 0xFF (all 1s) for matching bytes or
+0x00 (all 0s) for mismatches.
 
-So the instruction vpcmpeqb does the comparision. It is a more suitable
-instruction to implant a backdoor. Because it compare more data, it is
-easier to identify the hash string, less likely trigger the backdoor by
-mistake.
+The string comparison is performed using vpcmpeqb rather than traditional
+CMPS instructions. From the backdoor's perspective, this approach is more
+advantageous because these extended instruction sets are specialized and
+less frequently used than basic x86 instructions. Additionally, vpcmpeqb
+can compare significantly more bytes in a single operation, making it
+easier to identify the target hash string while minimizing the risk of
+accidental triggers. Note, complex instruction like vpcmpeqb are typically
+implmented through microcode.
 
 
 ----[ 4.2 Other Thoughts
@@ -2354,7 +2351,8 @@ Hope this marks just the start of exploring CPU backdoors.
 --[ 6. Acknowledgements
 
 Thanks to my wife uay and my kids Ray and Summer! You're always patient
-with me, even when I'm not at my best. Love you guys!
+with me. Even after three years you still believe me having a paper to
+finish. Love you guys!
 
 
 --[ 7. References
