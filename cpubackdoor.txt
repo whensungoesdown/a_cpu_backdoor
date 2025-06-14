@@ -2389,6 +2389,12 @@ https://www.oracle.com/servers/technologies/opensparc-t1-page.html
 https://github.com/qemu/QEMU
 
 
+I’ve uploaded microcode-related projects to GitHub:
+
+https://github.com/whensungoesdown/lib-micro
+https://github.com/whensungoesdown/coreboot
+
+
 begin 664 code.tar.gz
 M'XL(`````````^P\:W?:2I+WLW]%W\RY64@P!OS*&#N[!(/##K8)X#QN)J,C
 MI`:T$9*N)/S8B>>W;U4_I-8+<!Z^NV>C<X)1=W5UO;JZNKJ(X9ITYY<?^]3@
