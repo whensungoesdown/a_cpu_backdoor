@@ -24,10 +24,9 @@
          3.4.4 Installing Microcode Backdoors via Coreboot 
          3.4.5 The 0x0 Bytes Left Club
          3.4.6 CRBUS, LDAT and Memory Arrays
-4. Misc
+4. Miscellaneous
     4.1 X86 SSE/AVX Instruction Sets
     4.2 Other Thoughts
-    4.3 Xilinx FPGA Toolchain Notes
 5. Conclusion
 6. Acknowledgements
 7. References
@@ -120,15 +119,18 @@ cycle-accurate verification of the backdoor on actual CPU hardware.
 Since Windows does not support SPARC-based systems, I installed a Linux
 distribution instead and made adjustments to the backdoor. In Linux and
 other Unix-like systems, the use of salted password hashes complicates
-backdoor implementation. Since the salt prevents the CPU from directly
+backdoor implementation. The salt prevents the CPU from directly
 recognizing predefined hash values, but the username transmitted in
 cleartext can still serve as an alternative trigger. 
+
+A microcode-based prototype was also implemented on an Intel Pentium N4200
+CPU (Goldmont microarchitecture) to validate the concept on commercial
+hardware.
  
 This paper is structured in three main sections. We begin by discussing
 existing CPU backdoors to establish necessary background knowledge. Next,
 we introduce and demonstrate our novel CPU backdoor design. Finally, we
-conclude by discussing promising directions for future research in this
-domain.
+discuss and conclude with our insignts.
 
 
 --[ 2. Known CPU "Backdoors"
@@ -2139,7 +2141,7 @@ hooks.
  31: 1 0x58ba  0x017a
 
 
---[ 4. Misc 
+--[ 4. Miscellaneous 
 
 ----[ 4.1 x86 SSE/AVX Instruction Set
 
@@ -2286,81 +2288,29 @@ I’m not certain whether this is feasible, but it’s certainly an interesting
 idea to explore.
 
 
-----[ 4.3 Xilinx FPGA Toolchain Notes
-
-"OpenSPARC T1 Processor Design and Verification User's Guide" and
-"OpenSPARC Internals" are both excellent resources on OpenSPARC T1. These
-books offer detailed tutorials on compiling the processor and generating
-the bitstream file.
-
-Xilinx EDK (Embedded Development Kit) and ISE (Integrated Synthesis
-Environment) are necessary for placing and routing a design on a Xilinx
-FPGA and downloading it to the FPGA. Testing was conducted on Ubuntu 20.04,
-contrary to the specified requirements in the book. Specifically, ISE
-version 9.1i and EDK version 10.1 sp3 are required.
-
-Here are some notes detailing errors I encountered and their respective
-solutions.
-
-
-1) microblaze_7_10_d IP missing.
-
-Install EDK10.1 sp3.
-
-
-2) ERROR:MDT - IPNAME:hard_ethernet_mac_wrapper INSTANCE:hard_ethernet_mac
-...  License missing. 
-
-Find the corresponding license and put it in the
-Xilinx/10.1/ISE/coregen/core_licenses/ directory.
-
-
-3) Error occurred during initialization of VM
-java/lang/NoClassDefFoundError: java/lang/Object ERROR:coreutil - Aborting
-COREGEN execution!
-
-The java j2se (Xilinx/10.1/ISE/java/) that comes with ISE9.1i is too old.
-Install Java SE Development Kit 5.0u22.
-https://download.oracle.com/otn/java/jdk/1.5.0_22/jdk-1_5_0_22-linux
--amd64.bin
-
-Replace Xilinx/10.1/ISE/java/lin64/jre directory with the new one
-installed.
-
-
-4) ERROR:Bitgen - Unknown PLL_ADV site in pminfo.
-
-This error arises from a bug in
-Xilinx/10.1/ISE/virtex5/lib/lin64/libBsRain_Bitgen.so. Within the
-BsRain_BfdTile::plladvpminfo function, there exists an unnecessary string
-destructor, which nulls the first four bytes of the name string.
-
-Port::StringBase<char>::~StringBase((StringBase<char>*)&local_48);
-_ZN4Port10StringBaseIcED1Ev@plt.
-
-Removing this destructor resolves the issue.
-
-
 --[ 5. Conclusion
 
-This article outlines a practical CPU backdoor designed to circumvent
-mainstream operating system password authentication. The prototype is
-implemented on the OpenSPARC T1 processor and tested using the Xilinx
-ML505-V5LX110T FPGA board.
+This paper introduces a CPU backdoor that enables an attacker to log into
+any account on the system using a master password.
 
-We argue that creating a CPU backdoor solely through hardware poses
-challenges. Instead, a symbiotic relationship between hardware and
-upper-layer software is proposed. While software keeps changing, certain
-critical libraries stay the same for ages. 
+To test the idea, three prototypes are built: one on the QEMU TCG emulator,
+another on the OpenSPARC T1 processor (FPGA-based), and a third via
+microcode modification on an Intel Pentium N4200 CPU.
 
-Hope this marks just the start of exploring CPU backdoors.
+The idea we aim to convey is this: while embedding backdoors deeper into
+hardware improves stealth, hardware alone imposes usability constraints.
+However, if the software intentionally cooperates the hardware, we gain
+more opportunities to deploy effective CPU backdoors. In our approach, the
+upper-layer operating system’s password authentication module exhibits
+detectable behavioral patterns, which the CPU monitors to infer
+authentication events.
 
 
 --[ 6. Acknowledgements
 
-Thanks to my wife uay and my kids Ray and Summer! You're always patient
-with me. Even after three years you still believe me having a paper to
-finish. Love you guys!
+Special thank you to my wife uay and our kids Ray and Summer! You never
+stop believing in me. Even after three long years, you still have faith
+that I’ll finish this paper. I love you all so much!
 
 
 --[ 7. References
@@ -2431,9 +2381,9 @@ finish. Love you guys!
 
 --[ 8. Appendix: Code
 
-Only part of the code with the backdoor implementation is included in the
-code.tar.gz due to the size of both OpenSPARCT1 and QEMU projects. For
-access to the complete projects, please refer to the following links:
+Due to the large size of the OpenSPARCT1 and QEMU projects, only the
+portion of code containing the backdoor implementation is included in the
+code.tar.gz file. For the full projects, please visit the following links:
 
 https://www.oracle.com/servers/technologies/opensparc-t1-page.html
 https://github.com/qemu/QEMU
