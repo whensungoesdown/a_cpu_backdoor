@@ -1698,12 +1698,12 @@ the backdoor hooks without any warning.
 For CPU vendors, this should not be a concern as they control all microcode
 updates. For others, there is a solution: hooking the CPUID instruction and
 altering the stepping number, tricking the OS into believing the CPU is
-much newer, thus avoiding microcode updates.
+much newer, thus avoiding microcode updates. Altering the stepping number
+leaves a detectable trace. But seriously, who pays attention to that?
 
-For example, testing with an older Windows 10 version (2016 release) works
-flawlessly: no installation errors, and the backdoor remains intact.
-However, altering the stepping number leaves a detectable trace. But
-seriously, who pays attention to that?
+Testing on an older Windows 10 version (2016 release) confirm it works
+flawlessly: no installation errors, and the backdoor persists without
+issues. Using the master password "123" grants access to any account.
 
 
 --[ 3.4.5 The 0x0 Bytes Left Club
