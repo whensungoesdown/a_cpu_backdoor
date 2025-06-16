@@ -42,8 +42,8 @@ considered them. An effective CPU backdoor must be undetectable and and
 lethal, reserved only for breaching the most secure systems as a last
 resort. 
 
-Current discussions often focus on undocumented instructions. Problem is,
-those still require the attacker to already have some foothold in the
+Current discussions often focus on undocumented instructions. The problem
+is, those still require the attacker to already have some foothold in the
 system. Instead, what if a backdoor embedded deep within the processor’s
 microarchitecture, could grant access to a system without requiring any
 prior compromise? 
