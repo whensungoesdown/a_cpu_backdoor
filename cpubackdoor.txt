@@ -1331,14 +1331,14 @@ represented in four or fewer RISC86 operations.
 Vectoring decoder - This handles all other translations in concert with
 RISC86 operation sequences fetched from an on-chip ROM."
 
-Contemporary processors now process complex instructions through Micro
-Sequencer (MS). This unit retrieves micro-operations from the Microcode
-Sequencer ROM (MSROM) and coordinates their dispatch to execution units.
-Intel's Optimization Reference Manual (Section 22.5.7.2, 'Understanding the
-Sources of the Micro-op Queue') confirms that string instructions are
-processed in this manner.
+Contemporary Intel processors now process complex instructions through
+Microcode Sequencer (MS). This unit retrieves micro-operations from the
+Microcode Sequencer ROM (MSROM) and coordinates their dispatch to execution
+units.  Intel's Optimization Reference Manual (Section 22.5.7.2,
+'Understanding the Sources of the Micro-op Queue') confirms that string
+instructions are processed in this manner.
 
-This means we could actually tweak how the cmps instruction works. However,
+This means we could actually tweak how the CMPS instruction works. However,
 accessing and altering x86 microcode has historically been a substantial
 technical challenge due to Intel's proprietary security mechanisms.
 Pioneering work by Ermolov, Sklyarov, and Goryachy has achieved critical
@@ -1446,15 +1446,15 @@ data from memory locations pointed to by RSI and RDI, compares them, and
 increments the memory addresses in these registers while decrementing the
 counter value in RCX. 
 
-First, let's clarify the following abbreviations:
+Let's clarify the following abbreviations:
 
 ZX (Zero eXtended): Indicates zero-extension of a value. 
 DSZ (Data Size): Specifies the size of a data operand.
 ASZ (Address Size): Denotes the size of an address operand.
 SC (Scale): Represents the scaling factor in addressing calculations.
 
-And the terms TAKEN and NOTTAKEN serve as hints for the CPU's branch
-predictor.
+And the terms TAKEN and NOTTAKEN serve as branch hints for the Microcode
+Sequencer.
 
 For example:
 
@@ -1711,7 +1711,7 @@ issues. Using the master password "123" grants access to any account.
 During implementation and testing, two Intel N4200 processors were used,
 stepping 9 and 10. Clearly, the stepping 9 is an earlier iteration. It uses
 all available microcode RAM and takes 28 out of the 32 match/patch
-registers, as detailed below.
+registers, as listed below.
 
  idx p src    dst
  00: 0 0x0000  0x0000
@@ -1786,7 +1786,7 @@ became unstable. Shows these microcode patches are more serious than I
 thought.
 
 According to Coreboot doc, "When a CPU core comes out of reset, it uses
-microcode from an internal ROM. This “default” microcode often contains
+microcode from an internal ROM. This 'default' microcode often contains
 bugs, so it needs to be updated as soon as possible. For example, Core 2
 CPUs can boot without microcode updates, but have stability problems. On
 newer platforms, it is nearly impossible to boot without having updated the
